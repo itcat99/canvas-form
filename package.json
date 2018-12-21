@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.2.0",
+    "hashids": "^1.2.2",
+    "mitt": "^1.1.3",
     "same-dva": "http://git.fremango.com/FreMaNgo/Rua.git"
   },
   "devDependencies": {

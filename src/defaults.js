@@ -1,8 +1,8 @@
 export default {
   className: "canvas-form",
   target: "#root",
-  width: 1024, // 表格宽度
-  height: 768, // 表格高度
+  width: 800, // 表格宽度
+  height: 600, // 表格高度
   fillColor: "#000",
   strokeColor: "#000",
   fontSize: 14,
@@ -11,20 +11,32 @@ export default {
   horizontalAlign: "center",
   verticalAlign: "center",
   autoSize: false, // 是否铺满屏幕
-  data: {},
+  columns: [],
+  rows: [],
+  columnWidth: 100,
+  rowHeight: 30,
 };
-
-/* 
-  data: {
-    columns: []
-  }
-*/
 
 /* columns
 
   {
     index,
     x,
-    width
+    width,
+    id,
+    title,
+    type
   }
+*/
+
+/* rows
+
+  {
+    index,
+    y,
+    height,
+    id,
+    data: { 对应col上的id }
+  }
+
 */
