@@ -6,6 +6,7 @@ const htmlPlugin = require("html-webpack-plugin");
 const port = process.env.NODE_PORT || 3000;
 
 const dev = {
+  entry: Object.assign({}, common.entry, { mock: `${config.mock}/mocks.js` }),
   mode: "development",
   devtool: "source-map",
   devServer: {

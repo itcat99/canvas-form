@@ -13,6 +13,8 @@ export default {
   autoSize: false, // 是否铺满屏幕
   columns: [],
   rows: [],
+  renderColCount: 20,
+  renderRowCount: 50,
   columnWidth: 100,
   rowHeight: 30,
 };
