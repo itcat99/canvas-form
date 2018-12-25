@@ -35,6 +35,8 @@ class CanvasForm {
 
     this.emitter = mitt();
 
+    /* 初始化rows && cols */
+    this.handleCoord();
     this.init();
     this.listen();
   }
@@ -55,38 +57,66 @@ class CanvasForm {
     return options;
   }
 
+  handleCoord() {
+    let { rows, columns } = this.opts;
+    let rowHeightCount = this.yStart,
+      colWidthCount = this.xStart;
+
+    rows = rows.map((row, index) => {
+      let { height } = row;
+      height = intNum(height * this.pixelRatio);
+      row = Object.assign({}, row, { y: rowHeightCount, height, index });
+      rowHeightCount += height;
+
+      return row;
+    });
+
+    columns = columns.map((col, index) => {
+      let { width } = col;
+      width = intNum(width * this.pixelRatio);
+      col = Object.assign({}, col, { x: colWidthCount, width, index });
+      colWidthCount += width;
+
+      return col;
+    });
+
+    this.opts.rows = rows;
+    this.opts.columns = columns;
+  }
+
   init() {
     const { canvasWidth, canvasHeight } = this.opts;
     /* 1. 初始化canvas到dom */
     this.createCanvas(this.opts);
     /* 2. 画外框 */
-    drawLines(
-      [
+    drawLines({
+      lines: [
         { from: this.lt, to: this.rt },
         { from: this.rt, to: this.rb },
         { from: this.rb, to: this.lb },
         { from: this.lb, to: this.lt },
       ],
-      this.canvas
-    );
+      ctx: this.canvas,
+    });
 
     /* 3. 过滤显示的cols和rows */
     const { renderCols, renderRows } = this.filterData(this.opts);
     /* 4. 处理columns */
-    const { lines: colLines, columns, totalWidth } = this.handleColumns(renderCols, canvasHeight);
+    const colLines = this.getColLines(renderCols, canvasHeight);
     /* 5. 处理rows */
-    const { lines: rowLines, rows, totalHeight } = this.handleRows(renderRows, canvasWidth);
+    const rowLines = this.getRowLines(renderRows, canvasWidth);
 
-    this.columns = columns;
+    this.columns = renderCols;
     this.colLines = colLines;
-    this.rows = rows;
+    this.rows = renderRows;
     this.rowLines = rowLines;
-    this.totalWidth = totalWidth;
-    this.totalHeight = totalHeight;
 
     /* 6. 画线 */
-    drawLines([].concat(colLines, rowLines), this.canvas);
-    this.data = { columns, rows };
+    drawLines({
+      lines: [].concat(colLines, rowLines),
+      ctx: this.canvas,
+    });
+    this.data = { columns: renderCols, rows: renderRows };
     /* 7. 渲染文字 */
     this.render(this.data, this.opts, this.canvas);
   }
@@ -157,50 +187,34 @@ class CanvasForm {
     return { renderCols, renderRows };
   }
 
-  handleColumns(cols, height) {
-    /* 1. 生成画线用的数据 && 生成data用的数据 */
-    const tempCols = [];
-    const tempLines = [];
-    let countWidth = 0;
+  getColLines(cols, height) {
+    /* 1. 生成画线用的数据 */
+    const lines = [];
 
-    cols.forEach((column, index) => {
-      const width = intNum(column.width * this.pixelRatio);
-      tempCols.push(Object.assign({}, column, { index, x: countWidth + this.xStart, width }));
-      countWidth += width;
+    cols.forEach(column => {
+      const { x, width } = column;
 
-      const from = [tempCols[index].x + width, 0];
-      const to = [tempCols[index].x + width, height - this.yEnd];
+      const from = [x + width, 0];
+      const to = [x + width, height - this.yEnd];
 
-      tempLines.push({ from, to });
+      lines.push({ from, to });
     });
 
-    return {
-      lines: tempLines,
-      columns: tempCols,
-      totalWidth: countWidth,
-    };
+    return lines;
   }
 
-  handleRows(rows, width) {
-    const tempRows = [];
-    const tempLines = [];
-    let countHeight = 0;
+  getRowLines(rows, width) {
+    const lines = [];
 
-    rows.forEach((row, index) => {
-      const height = intNum(row.height * this.pixelRatio);
-      tempRows.push(Object.assign({}, row, { height, index, y: countHeight + this.yStart }));
-      countHeight += height;
+    rows.forEach(row => {
+      const { y, height } = row;
 
-      const from = [0 - this.scrollX, tempRows[index].y + height - this.scrollY];
-      const to = [width - this.xEnd - this.scrollX, tempRows[index].y + height - this.scrollY];
-      tempLines.push({ from, to });
+      const from = [0 - this.scrollX, y + height - this.scrollY];
+      const to = [width - this.xEnd - this.scrollX, y + height - this.scrollY];
+      lines.push({ from, to });
     });
 
-    return {
-      lines: tempLines,
-      rows: tempRows,
-      totalHeight: countHeight,
-    };
+    return lines;
   }
 
   /**
@@ -282,74 +296,78 @@ class CanvasForm {
         this.canvas
       );
       drawText([getTextPosition(value, this.selectedCell)], this.canvas);
-      drawLines(
-        [
+      drawLines({
+        lines: [
           { from: this.lt, to: this.rt },
           { from: this.rt, to: this.rb },
           { from: this.rb, to: this.lb },
           { from: this.lb, to: this.lt },
         ],
-        this.canvas
-      );
+        ctx: this.canvas,
+      });
     }
-    drawLines(rectline, this.canvas);
+    drawLines({
+      lines: rectline,
+      ctx: this.canvas,
+    });
     this.updateSelect({ offsetX, offsetY });
     this.drawRect([this.selectedCell], this.canvas, {
       fillStyle: "rgba(0,0,200, .2)",
     });
     rectline = this.getRectLines(this.selectedCell);
-    drawLines(rectline, this.canvas, {
-      strokeStyle: "#0000ff",
+    drawLines({
+      lines: rectline,
+      ctx: this.canvas,
+      styles: {
+        strokeStyle: "#0000ff",
+      },
     });
   };
 
   onWheel = e => {
-    console.log(e);
     e.preventDefault ? e.preventDefault : (e.returnValue = false);
+    const { rows, canvasHeight } = this.opts;
+    const lastRow = rows[rows.length - 1];
+    if (lastRow.y + lastRow.height < canvasHeight) return false;
+
     window.requestAnimationFrame(() => {
       // console.log(e.wheelDelta);
       const { canvasWidth, canvasHeight } = this.opts;
-      this.scrollY -= e.wheelDeltaY;
-      this.scrollY = Math.max(0, this.scrollY);
-      // this.scrollCurrentRow += e.wheelDelta < 0 ? 1 : -1;
-      // this.scrollCurrentRow = Math.max(0, this.scrollCurrentRow);
+      this.scrollY -= e.wheelDelta;
+      this.scrollY = Math.min(Math.max(0, this.scrollY), lastRow.y + lastRow.height - canvasHeight);
       this.canvas.clearRect(0, 0, canvasWidth, canvasHeight);
 
-      this.scrollCurrentRow = this.getScrollCurrentRow(
-        this.opts.rows,
-        this.scrollY,
-        this.scrollCurrentRow
-      );
+      this.scrollCurrentRow = this.getCurrentRowIndex(this.scrollY, this.scrollCurrentRow, rows);
+      // if (this.scrollCurrentRow > this.opts.renderRowCount / 2) {
+      /* 3. 过滤显示的cols和rows */
+      const { renderCols, renderRows } = this.filterData(this.opts);
+      /* 4. 处理columns */
+      const colLines = this.getColLines(renderCols, canvasHeight);
+      /* 5. 处理rows */
+      const rowLines = this.getRowLines(renderRows, canvasWidth);
 
-      console.log("scrollCurrentRow: ", this.scrollCurrentRow);
+      this.columns = renderCols;
+      this.colLines = colLines;
+      this.rows = renderRows;
+      this.rowLines = rowLines;
+      this.data = { columns: this.columns, rows: this.rows };
+      // }
       /* 2. 画外框 */
-      drawLines(
-        [
+      drawLines({
+        lines: [
           { from: this.lt, to: this.rt },
           { from: this.rt, to: this.rb },
           { from: this.rb, to: this.lb },
           { from: this.lb, to: this.lt },
         ],
-        this.canvas
-      );
-
-      /* 3. 过滤显示的cols和rows */
-      const { renderCols, renderRows } = this.filterData(this.opts);
-      /* 4. 处理columns */
-      const { lines: colLines, columns, totalWidth } = this.handleColumns(renderCols, canvasHeight);
-      /* 5. 处理rows */
-      const { lines: rowLines, rows, totalHeight } = this.handleRows(renderRows, canvasWidth);
-
-      this.columns = columns;
-      this.colLines = colLines;
-      this.rows = rows;
-      this.rowLines = rowLines;
-      this.totalWidth = totalWidth;
-      this.totalHeight = totalHeight;
+        ctx: this.canvas,
+      });
 
       /* 6. 画线 */
-      drawLines([].concat(colLines, rowLines), this.canvas);
-      this.data = { columns, rows };
+      drawLines({
+        lines: [].concat(this.rowLines, this.colLines),
+        ctx: this.canvas,
+      });
       /* 7. 渲染文字 */
       this.render(this.data, this.opts, this.canvas);
     });
@@ -419,26 +437,32 @@ class CanvasForm {
     ];
   }
 
-  getScrollCurrentRow = (rows, scrollY, currentRow) => {
-    let { y: currentRowY, height: currentRowHeight } = rows[currentRow];
-    let index = currentRow;
-    let currentHeight = currentRowY + currentRowHeight;
+  getCurrentRowIndex(scrollY, currentRowIndex, rows) {
+    if (scrollY <= 0) return 0;
 
-    console.log("scrollY: ", rows[currentRow]);
-    if (currentHeight < scrollY) {
-      while (currentHeight > scrollY) {
-        index++;
-        currentHeight += rows[index].height;
-      }
-    } else {
-      while (currentHeight < scrollY) {
-        index--;
-        currentHeight -= rows[index].height;
+    const currentRow = rows[currentRowIndex];
+    const { y, height } = currentRow;
+
+    if (scrollY > height + y) {
+      for (let i = currentRowIndex; i < rows.length; i++) {
+        const row = rows[i];
+        if (row.y + row.height > scrollY) {
+          return i;
+        }
       }
     }
 
-    return index;
-  };
+    if (scrollY < y) {
+      for (let i = currentRowIndex; i >= 0; i--) {
+        const row = rows[i];
+        if (scrollY > row.y) {
+          return i;
+        }
+      }
+    }
+
+    return currentRowIndex;
+  }
 }
 
 window.CanvasForm = CanvasForm;

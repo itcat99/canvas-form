@@ -6,7 +6,8 @@
  * @param {Number[]} lines[].from 起始坐标
  * @param {Number[]} lines[].to 结束坐标
  */
-export const drawLines = (lines, ctx, styles) => {
+export const drawLines = config => {
+  const { lines, ctx, styles, offsetY = 0, offsetX = 0 } = config;
   if (!lines || !lines.length) return false;
   if (styles) {
     ctx.save();
@@ -17,8 +18,8 @@ export const drawLines = (lines, ctx, styles) => {
   lines.forEach(line => {
     if (!line) return false;
     const { from, to } = line;
-    ctx.moveTo(...from);
-    ctx.lineTo(...to);
+    ctx.moveTo(from[0] + offsetX, from[1] + offsetY);
+    ctx.lineTo(to[0] + offsetX, to[1] + offsetY);
     ctx.stroke();
   });
   ctx.stroke();
@@ -42,7 +43,7 @@ export const drawText = (texts, ctx) => {
   texts.forEach(text => {
     if (!text) return false;
     const { value, x, y, maxWidth } = text;
-    if (!value || !value.length) return false;
+    // if (!value || !value.length) return false;
     ctx.fillText(value, x, y);
   });
 };

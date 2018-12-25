@@ -1,7 +1,7 @@
 import { Random } from "mockjs";
 
 const getCols = count => {
-  const cols = [];
+  const cols = [{ id: "index", width: 50, title: "index" }];
   for (count; count > 0; count--) {
     cols.push({
       width: Random.natural(50, 200),
@@ -14,12 +14,16 @@ const getCols = count => {
 
 const getRows = (cols, count) => {
   const rows = [];
-  for (count; count > 0; count--) {
+  for (let i = 0; i < count; i++) {
     const data = {};
 
     cols.forEach(col => {
       const { id: colId } = col;
-      data[colId] = Random.string(7, 9);
+      if (colId === "index") {
+        data[colId] = i;
+      } else {
+        data[colId] = Random.string(7, 9);
+      }
     });
 
     rows.push({

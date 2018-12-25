@@ -45,3 +45,11 @@ css 属性:
 
 - 计算不同颜色的色块坐标和大小 -> colorRects: { x, y, width, height }
 - 计算不同属性的字 -> differentFonts: { color, weight, size }
+
+思路：
+
+1. 根据 renderColCount 和 renderRowCount 来过滤画的范围
+2. 根据 rows 和 columns 生成带坐标(x,y)的 data，将 rows 和 columns 存入 this.data
+3. draw 外框的线条
+4. draw col 和 row 的线条
+5. draw 文字
