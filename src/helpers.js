@@ -63,6 +63,24 @@ export const getTextPosition = (value, cellInfo, align) => {
   return { value, x: intNum(x + width / 2), y: intNum(y + height / 2) };
 };
 
+/**
+ * 获取画一个空心方块的所有线段坐标
+ * @param {String[]} start 起点坐标 [xStart, yStart]
+ * @param {String[]} end 终点坐标 [xEnd, yEnd]
+ * @returns {Object[]} 返回线段的坐标数组
+ */
+export const getRectLinePosition = (start, end) => {
+  const [startX, startY] = start;
+  const [endX, endY] = end;
+
+  return [
+    { from: [startX, startY], to: [endX, startY] },
+    { from: [endX, startY], to: [endX, endY] },
+    { from: [endX, endY], to: [startX, endY] },
+    { from: [startX, endY], to: [startX, startY] },
+  ];
+};
+
 export const isIE =
   typeof navigator !== "undefined" &&
   (/MSIE/.test(navigator.userAgent) ||

@@ -102,26 +102,31 @@ class CanvasForm {
     /* 1. 初始化canvas到dom */
     this.createCanvas(this.opts);
 
-    /* 3. 过滤显示的cols和rows */
-    const { renderCols, renderRows } = this.filterData(this.opts);
-    /* 4. 处理columns */
+    /* 2. 过滤显示的cols和rows 和merges */
+    const { renderCols, renderRows, renderMerges } = this.filterData(this.opts);
+    /* 3. 处理columns */
     const colLines = this.getColLines(renderCols, canvasHeight);
-    /* 5. 处理rows */
+    /* 4. 处理rows */
     const rowLines = this.getRowLines(renderRows, canvasWidth);
 
     this.renderCols = renderCols;
-    this.colLines = colLines;
     this.renderRows = renderRows;
+    this.renderMerges = renderMerges;
+
+    this.colLines = colLines;
     this.rowLines = rowLines;
 
-    /* 6. 画线 */
+    /* 5. 画线 */
     drawLines({
       lines: [].concat(this.wrapperLines, colLines, rowLines),
       ctx: this.canvas,
     });
 
-    /* 7. 渲染文字 */
+    /* 6. 渲染文字 */
     this.render({ columns: renderCols, rows: renderRows }, this.opts, this.canvas);
+
+    /* 7. 处理merges */
+    this.drawMergeCell(renderMerges, this.canvas);
   }
 
   createCanvas(opts) {
@@ -172,11 +177,12 @@ class CanvasForm {
   }
 
   filterData(opts) {
-    const { renderColCount, renderRowCount } = opts;
+    const { renderColCount, renderRowCount, merges } = opts;
     const columns = this.columns;
     const rows = this.rows;
     const renderCols = [],
-      renderRows = [];
+      renderRows = [],
+      renderMerges = [];
 
     for (let i = this.scrollTopColIndex; i < renderColCount + this.scrollTopColIndex; i++) {
       const column = columns[i];
@@ -189,7 +195,20 @@ class CanvasForm {
       renderRows.push(rows[i]);
     }
 
-    return { renderCols, renderRows };
+    for (let i = 0; i < merges.length; i++) {
+      const merge = merges[i];
+      const { from, to } = merge;
+      if (
+        from[0] <= renderCols[renderCols.length - 1].index &&
+        from[1] <= renderRows[renderRows.length - 1].index &&
+        to[0] < this.columns.length &&
+        to[1] < this.rows.length
+      ) {
+        renderMerges.push(merge);
+      }
+    }
+
+    return { renderCols, renderRows, renderMerges };
   }
 
   getColLines(cols, height) {
@@ -311,7 +330,7 @@ class CanvasForm {
         rows
       );
 
-      const { renderCols, renderRows } = this.filterData(this.opts);
+      const { renderCols, renderRows, renderMerges } = this.filterData(this.opts);
       const colLines = this.getColLines(renderCols, canvasHeight);
       const rowLines = this.getRowLines(renderRows, canvasWidth);
 
@@ -319,6 +338,7 @@ class CanvasForm {
       this.colLines = colLines;
       this.renderRows = renderRows;
       this.rowLines = rowLines;
+      this.renderMerges = renderMerges;
 
       drawLines({
         lines: [].concat(this.wrapperLines, this.rowLines, this.colLines),
@@ -326,6 +346,7 @@ class CanvasForm {
       });
       this.render({ columns: this.renderCols, rows: this.renderRows }, this.opts, this.canvas);
       this.drawSelectedCell(this.selectedCell, this.canvas);
+      this.drawMergeCell(renderMerges, this.canvas);
     });
   };
 
@@ -386,6 +407,41 @@ class CanvasForm {
         strokeStyle: "#0000ff",
       },
     });
+  }
+
+  drawMergeCell(merges, ctx) {
+    let lines = [],
+      values = [],
+      rects = [];
+    merges.forEach((merge, index) => {
+      const { from, to } = merge;
+      const [startColIndex, startRowIndex] = from;
+      const [endColIndex, endRowIndex] = to;
+      const startCol = this.columns[startColIndex];
+      const startRow = this.rows[startRowIndex];
+      const endCol = this.columns[endColIndex];
+      const endRow = this.rows[endRowIndex];
+
+      const x = startCol.x;
+      const y = startRow.y;
+      const width = endCol.x + endCol.width - startCol.x;
+      const height = endRow.y + endRow.height - startRow.y;
+
+      rects.push({ x: x - this.scrollX, y: y - this.scrollY, width, height });
+      const mergeCellLines = this.getRectLines({ x, y, width, height });
+      lines = [].concat(lines, mergeCellLines);
+      const value = getTextPosition(startRow.data[startCol.id], {
+        x: x - this.scrollX,
+        y: y - this.scrollY,
+        width,
+        height,
+      });
+      values.push(value);
+    });
+
+    clearRect(rects, ctx);
+    drawLines({ lines, ctx });
+    drawText(values, ctx);
   }
 
   // updateCells(columns, rows) {

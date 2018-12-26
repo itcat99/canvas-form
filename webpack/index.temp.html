@@ -15,8 +15,13 @@
 
         var columns = getCols(20);
         var rows = getRows(columns, 1000);
+        var merges = [
+          { from: [1, 1], to: [2, 2] },
+          { from: [1, 50], to: [1, 52] },
+          { from: [3, 30], to: [4, 33] },
+        ];
 
-        var app = new CanvasForm({ columns: columns, rows: rows });
+        var app = new CanvasForm({ columns: columns, rows: rows, merges: merges });
         window.canvasformInstanced = app;
       };
     </script>

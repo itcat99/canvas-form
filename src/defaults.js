@@ -13,6 +13,7 @@ export default {
   autoSize: false, // 是否铺满屏幕
   columns: [],
   rows: [],
+  merges: [],
   renderColCount: 20,
   renderRowCount: 50,
   columnWidth: 100,
@@ -41,4 +42,11 @@ export default {
     data: { 对应col上的id }
   }
 
+*/
+
+/* merges
+  {
+    from: [col, row],
+    to: [col, row]
+  }
 */

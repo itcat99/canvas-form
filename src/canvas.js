@@ -1,13 +1,14 @@
 /**
  * 画多条线
- * @param {Object[]} lines 线段的数组
- * @param {CanvasRenderingContext2D} ctx canvas context 2d
- * @param {Object} [styles] storkeStyle样式
- * @param {Number[]} lines[].from 起始坐标
- * @param {Number[]} lines[].to 结束坐标
+ * @param {Object} config 配置信息
+ * @param {Object[]} config.lines 线段的数组
+ * @param {CanvasRenderingContext2D} config.ctx canvas context 2d
+ * @param {Object} config.styles storkeStyle样式
+ * @param {Number[]} config.lines[].from 起始坐标
+ * @param {Number[]} config.lines[].to 结束坐标
  */
 export const drawLines = config => {
-  const { lines, ctx, styles, offsetY = 0, offsetX = 0 } = config;
+  const { lines, ctx, styles } = config;
   if (!lines || !lines.length) return false;
   if (styles) {
     ctx.save();
@@ -18,8 +19,8 @@ export const drawLines = config => {
   lines.forEach(line => {
     if (!line) return false;
     const { from, to } = line;
-    ctx.moveTo(from[0] + offsetX, from[1] + offsetY);
-    ctx.lineTo(to[0] + offsetX, to[1] + offsetY);
+    ctx.moveTo(from[0], from[1]);
+    ctx.lineTo(to[0], to[1]);
     ctx.stroke();
   });
   ctx.stroke();
