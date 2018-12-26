@@ -1,5 +1,5 @@
 import DEFAULTS from "./defaults";
-import { intNum, getHashId, nearly, getTextPosition, isIE } from "./helpers";
+import { intNum, getHashId, nearly, getTextPosition, isIE, KEY_CODES } from "./helpers";
 import { drawLines, drawText, clearRect, setCtxAttrs } from "./canvas";
 import mitt from "mitt";
 
@@ -118,7 +118,7 @@ class CanvasForm {
 
     /* 5. 画线 */
     drawLines({
-      lines: [].concat(this.wrapperLines, colLines, rowLines),
+      lines: [].concat(colLines, rowLines, this.wrapperLines),
       ctx: this.canvas,
     });
 
@@ -161,6 +161,7 @@ class CanvasForm {
         style: `width:${width}px; height:${height}px;`,
         width: canvasWidth,
         height: canvasHeight,
+        tabindex: "-1",
       },
       this.$canvasEl
     );
@@ -299,6 +300,8 @@ class CanvasForm {
     this.isIE
       ? this.$canvasEl.addEventListener("mousewheel", this.onWheel)
       : this.$canvasEl.addEventListener("wheel", this.onWheel);
+
+    this.$canvasEl.addEventListener("keydown", this.onKeydown);
   }
 
   onSelectCell = e => {
@@ -322,32 +325,44 @@ class CanvasForm {
       const { canvasWidth, canvasHeight } = this.opts;
       this.scrollY -= e.wheelDelta;
       this.scrollY = Math.min(Math.max(0, this.scrollY), lastRow.y + lastRow.height - canvasHeight);
-      this.canvas.clearRect(0, 0, canvasWidth, canvasHeight);
 
-      this.scrollTopRowIndex = this.getScrollTopRowIndex(
-        this.scrollY,
-        this.scrollTopRowIndex,
-        rows
-      );
+      // this.canvas.clearRect(0, 0, canvasWidth, canvasHeight);
 
-      const { renderCols, renderRows, renderMerges } = this.filterData(this.opts);
-      const colLines = this.getColLines(renderCols, canvasHeight);
-      const rowLines = this.getRowLines(renderRows, canvasWidth);
+      // this.scrollTopRowIndex = this.getScrollTopRowIndex(
+      //   this.scrollY,
+      //   this.scrollTopRowIndex,
+      //   rows
+      // );
 
-      this.renderCols = renderCols;
-      this.colLines = colLines;
-      this.renderRows = renderRows;
-      this.rowLines = rowLines;
-      this.renderMerges = renderMerges;
+      // const { renderCols, renderRows, renderMerges } = this.filterData(this.opts);
+      // const colLines = this.getColLines(renderCols, canvasHeight);
+      // const rowLines = this.getRowLines(renderRows, canvasWidth);
 
-      drawLines({
-        lines: [].concat(this.wrapperLines, this.rowLines, this.colLines),
-        ctx: this.canvas,
-      });
-      this.render({ columns: this.renderCols, rows: this.renderRows }, this.opts, this.canvas);
-      this.drawMergeCell(renderMerges, this.canvas);
-      this.drawSelectedCell(this.selectedCell, this.canvas);
+      // this.renderCols = renderCols;
+      // this.colLines = colLines;
+      // this.renderRows = renderRows;
+      // this.rowLines = rowLines;
+      // this.renderMerges = renderMerges;
+
+      // drawLines({
+      //   lines: [].concat(this.rowLines, this.colLines, this.wrapperLines),
+      //   ctx: this.canvas,
+      // });
+      // this.render({ columns: this.renderCols, rows: this.renderRows }, this.opts, this.canvas);
+      // this.drawMergeCell(renderMerges, this.canvas);
+      // this.drawSelectedCell(this.selectedCell, this.canvas);
+
+      this.refresh(this.scrollY, this.scrollX);
     });
+  };
+
+  onKeydown = e => {
+    e.preventDefault();
+    const code = e.keyCode;
+
+    if (KEY_CODES[code] && this.selectedCell) {
+      this.updateSelectWithKeyboard(KEY_CODES[code]);
+    }
   };
 
   updateSelect(position) {
@@ -356,12 +371,17 @@ class CanvasForm {
     const { offsetX, offsetY } = position;
 
     /* 先判断是否在mergeCell内 */
-    for (let merge of this.renderMerges) {
-      const { from, to } = merge;
-      const xStart = this.columns[from[0]].x;
-      const yStart = this.rows[from[1]].y;
-      const xEnd = this.columns[to[0]].x + this.columns[to[0]].width;
-      const yEnd = this.rows[to[1]].y + this.rows[to[1]].height;
+    for (let index in this.renderMerges) {
+      const { from, to } = this.renderMerges[index];
+      const startCol = this.columns[from[0]];
+      const startRow = this.rows[from[1]];
+      const endCol = this.columns[to[0]];
+      const endRow = this.rows[to[1]];
+
+      const xStart = startCol.x;
+      const yStart = startRow.y;
+      const xEnd = endCol.x + endCol.width;
+      const yEnd = endRow.y + endRow.height;
 
       if (
         offsetX + this.scrollX > xStart &&
@@ -375,7 +395,16 @@ class CanvasForm {
           y: yStart,
           width: xEnd - xStart,
           height: yEnd - yStart,
-          value: this.rows[from[1]].data[this.columns[from[0]].id],
+          value: startRow.data[startCol.id],
+          isMerge: true,
+          startRowIndex: startRow.index,
+          startColIndex: startCol.index,
+          startRowId: startRow.id,
+          startColId: startCol.id,
+          endRowIndex: endRow.index,
+          endColIndex: endCol.index,
+          endRowId: endRow.id,
+          endColId: endCol.id,
         };
         return false;
       }
@@ -401,12 +430,77 @@ class CanvasForm {
     // this.emitter.emit("selectCellChange", this.selectedCell);
   }
 
+  updateSelectWithKeyboard(code) {
+    const cacheSelectCell = this.selectedCell;
+    const cacheScrollX = this.scrollX;
+    const cacheScrollY = this.scrollY;
+
+    const {
+      isMerge,
+      startRowIndex,
+      endRowIndex,
+      rowIndex,
+      startColIndex,
+      endColIndex,
+      colIndex,
+    } = this.selectedCell;
+    let nextCellPosition = null,
+      nextColIndex = 0,
+      nextRowIndex = 0;
+
+    switch (code) {
+      case "ARROW_LEFT":
+        nextRowIndex = isMerge ? startRowIndex : rowIndex;
+        nextColIndex = isMerge ? startColIndex - 1 : colIndex - 1;
+        break;
+      case "ARROW_RIGHT":
+        nextRowIndex = isMerge ? startRowIndex : rowIndex;
+        nextColIndex = isMerge ? endColIndex + 1 : colIndex + 1;
+        break;
+      case "ARROW_UP":
+        nextRowIndex = isMerge ? startRowIndex - 1 : rowIndex - 1;
+        nextColIndex = isMerge ? startColIndex : colIndex;
+        break;
+      case "ARROW_DOWN":
+        nextRowIndex = isMerge ? endRowIndex + 1 : rowIndex + 1;
+        nextColIndex = isMerge ? startColIndex : colIndex;
+        break;
+      default:
+        break;
+    }
+
+    nextColIndex = Math.max(0, Math.min(this.columns.length - 1, nextColIndex));
+    nextRowIndex = Math.max(0, Math.min(this.rows.length - 1, nextRowIndex));
+
+    nextCellPosition = {
+      offsetX: this.columns[nextColIndex].x - cacheScrollX + 1,
+      offsetY: this.rows[nextRowIndex].y - cacheScrollY + 1,
+    };
+
+    this.updateSelect(nextCellPosition);
+
+    if (this.selectedCell.y + this.selectedCell.height - cacheScrollY >= this.opts.canvasHeight) {
+      this.scrollY = this.selectedCell.y;
+      this.refresh(this.scrollY, this.scrollX);
+    }
+
+    if (this.selectedCell.y <= cacheScrollY) {
+      this.scrollY -=
+        this.opts.canvasHeight - (this.selectedCell.height - (cacheScrollY - this.selectedCell.y));
+      this.scrollY = Math.max(0, this.scrollY);
+      console.log("this.scrollY: ", this.scrollY);
+      this.refresh(this.scrollY, this.scrollX);
+    }
+
+    this.drawSelectedCell(this.selectedCell, this.canvas, cacheSelectCell);
+  }
+
   drawSelectedCell(currentCell, ctx, prevCell) {
     if (prevCell) {
       let { value, x = x, y, width, height } = prevCell;
       if (currentCell.x === x && currentCell.y === y) return false;
 
-      if (this.scrollY < y && this.scrollX < x) {
+      if (this.scrollY <= y && this.scrollX <= x) {
         const cellRelativeInfo = {
           x: x + this.xStart - this.scrollX,
           y: y + this.yStart - this.scrollY,
@@ -499,6 +593,31 @@ class CanvasForm {
 
   //   this.cells = result;
   // }
+
+  refresh(scrollY, scrollX) {
+    const { canvasWidth, canvasHeight } = this.opts;
+    this.canvas.clearRect(0, 0, canvasWidth, canvasHeight);
+
+    this.scrollTopRowIndex = this.getScrollTopRowIndex(scrollY, this.scrollTopRowIndex, this.rows);
+
+    const { renderCols, renderRows, renderMerges } = this.filterData(this.opts);
+    const colLines = this.getColLines(renderCols, canvasHeight);
+    const rowLines = this.getRowLines(renderRows, canvasWidth);
+
+    this.renderCols = renderCols;
+    this.colLines = colLines;
+    this.renderRows = renderRows;
+    this.rowLines = rowLines;
+    this.renderMerges = renderMerges;
+
+    drawLines({
+      lines: [].concat(this.rowLines, this.colLines, this.wrapperLines),
+      ctx: this.canvas,
+    });
+    this.render({ columns: this.renderCols, rows: this.renderRows }, this.opts, this.canvas);
+    this.drawMergeCell(renderMerges, this.canvas);
+    this.drawSelectedCell(this.selectedCell, this.canvas);
+  }
 
   getRectLines(rect) {
     if (!rect) return false;

@@ -10,6 +10,7 @@
     "build": "webpack --config ./webpack/webpack.prod.js"
   },
   "dependencies": {
+    "@babel/plugin-transform-for-of": "^7.2.0",
     "@babel/runtime": "^7.2.0",
     "hashids": "^1.2.2",
     "mitt": "^1.1.3",
