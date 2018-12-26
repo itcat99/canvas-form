@@ -345,8 +345,8 @@ class CanvasForm {
         ctx: this.canvas,
       });
       this.render({ columns: this.renderCols, rows: this.renderRows }, this.opts, this.canvas);
-      this.drawSelectedCell(this.selectedCell, this.canvas);
       this.drawMergeCell(renderMerges, this.canvas);
+      this.drawSelectedCell(this.selectedCell, this.canvas);
     });
   };
 
@@ -354,6 +354,32 @@ class CanvasForm {
     const columns = this.renderCols;
     const rows = this.renderRows;
     const { offsetX, offsetY } = position;
+
+    /* 先判断是否在mergeCell内 */
+    for (let merge of this.renderMerges) {
+      const { from, to } = merge;
+      const xStart = this.columns[from[0]].x;
+      const yStart = this.rows[from[1]].y;
+      const xEnd = this.columns[to[0]].x + this.columns[to[0]].width;
+      const yEnd = this.rows[to[1]].y + this.rows[to[1]].height;
+
+      if (
+        offsetX + this.scrollX > xStart &&
+        offsetX + this.scrollX < xEnd &&
+        offsetY + this.scrollY > yStart &&
+        offsetY + this.scrollY < yEnd
+      ) {
+        // const
+        this.selectedCell = {
+          x: xStart,
+          y: yStart,
+          width: xEnd - xStart,
+          height: yEnd - yStart,
+          value: this.rows[from[1]].data[this.columns[from[0]].id],
+        };
+        return false;
+      }
+    }
 
     this.selectedCol = nearly(columns, offsetX + this.scrollX, "x");
     this.selectedRow = nearly(rows, offsetY + this.scrollY, "y");
