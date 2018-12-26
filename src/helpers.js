@@ -94,3 +94,26 @@ export const KEY_CODES = {
   39: "ARROW_RIGHT",
   38: "ARROW_UP",
 };
+
+/**
+ * 根据宽度，截取文字（粗略）
+ * @param {String} str 需要截取的文字
+ * @param {Number} strWidth 文字本身宽度
+ * @param {Number} targetWidth 目标宽度
+ */
+export const splitText = (str, strWidth, targetWidth) => {
+  let result = "";
+  const textWidth = Math.floor(strWidth / str.length);
+  const textArr = str.split("");
+
+  for (let i = 0; i < textArr.length; i++) {
+    const text = textArr[i];
+    if ((i + 1) * textWidth >= targetWidth - 5) {
+      break;
+    }
+
+    result += text;
+  }
+
+  return result;
+};

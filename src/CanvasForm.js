@@ -1,5 +1,5 @@
 import DEFAULTS from "./defaults";
-import { intNum, getHashId, nearly, getTextPosition, isIE, KEY_CODES } from "./helpers";
+import { intNum, getHashId, nearly, getTextPosition, isIE, splitText, KEY_CODES } from "./helpers";
 import { drawLines, drawText, clearRect, setCtxAttrs } from "./canvas";
 import mitt from "mitt";
 
@@ -178,7 +178,7 @@ class CanvasForm {
 
     /* 5. 画线 */
     drawLines({
-      lines: [].concat(this.rowLines, this.colLines, this.wrapperLines),
+      lines: [].concat(this.rowLines, this.colLines),
       ctx: this.canvas,
     });
     /* 6. 画文字 */
@@ -187,6 +187,12 @@ class CanvasForm {
     this.drawMergeCell(renderMerges, this.canvas);
     /* 8. 处理选中格子 */
     this.drawSelectedCell(this.selectedCell, this.canvas);
+
+    /* 9. 画外框 */
+    drawLines({
+      lines: this.wrapperLines,
+      ctx: this.canvas,
+    });
   }
 
   filterData(opts) {
@@ -293,7 +299,12 @@ class CanvasForm {
       const { id, x, width } = column;
       rows.forEach(row => {
         const { data, y, height } = row;
-        const value = data[id];
+        let value = data[id];
+        const valueWidth = ctx.measureText(value).width;
+        if (valueWidth > width) {
+          value = splitText(value, valueWidth, width);
+        }
+
         valueInfos.push(
           getTextPosition(value, { x: x - this.scrollX, y: y - this.scrollY, width, height })
         );
@@ -506,6 +517,10 @@ class CanvasForm {
         };
 
         clearRect([cellRelativeInfo], this.canvas);
+        const valueWidth = ctx.measureText(value).width;
+        if (valueWidth > width) {
+          value = splitText(value, valueWidth, width);
+        }
         drawText([getTextPosition(value, cellRelativeInfo)], ctx);
         drawLines({
           lines: [].concat(this.getRectLines(prevCell), this.wrapperLines),
@@ -528,7 +543,7 @@ class CanvasForm {
 
   drawMergeCell(merges, ctx) {
     let lines = [],
-      values = [],
+      valueInfos = [],
       rects = [];
     merges.forEach((merge, index) => {
       const { from, to } = merge;
@@ -547,18 +562,24 @@ class CanvasForm {
       rects.push({ x: x - this.scrollX, y: y - this.scrollY, width, height });
       const mergeCellLines = this.getRectLines({ x, y, width, height });
       lines = [].concat(lines, mergeCellLines);
-      const value = getTextPosition(startRow.data[startCol.id], {
+
+      const value = startRow.data[startCol.id];
+      const valueWidth = ctx.measureText(value).width;
+      if (valueWidth > width) {
+        value = splitText(value, valueWidth, width);
+      }
+      const valueInfo = getTextPosition(value, {
         x: x - this.scrollX,
         y: y - this.scrollY,
         width,
         height,
       });
-      values.push(value);
+      valueInfos.push(valueInfo);
     });
 
     clearRect(rects, ctx);
     drawLines({ lines, ctx });
-    drawText(values, ctx);
+    drawText(valueInfos, ctx);
   }
 
   getRectLines(rect) {
@@ -628,6 +649,8 @@ class CanvasForm {
 
     return scrollTopColIndex;
   }
+
+  getRenderStr(str, width) {}
 }
 
 export default CanvasForm;

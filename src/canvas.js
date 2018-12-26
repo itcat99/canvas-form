@@ -43,7 +43,7 @@ export const drawLines = config => {
 export const drawText = (texts, ctx) => {
   texts.forEach(text => {
     if (!text) return false;
-    const { value, x, y, maxWidth } = text;
+    const { value, x, y } = text;
     // if (!value || !value.length) return false;
     ctx.fillText(value, x, y);
   });
