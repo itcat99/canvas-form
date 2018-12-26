@@ -98,35 +98,10 @@ class CanvasForm {
   }
 
   init() {
-    const { canvasWidth, canvasHeight } = this.opts;
     /* 1. 初始化canvas到dom */
     this.createCanvas(this.opts);
-
-    /* 2. 过滤显示的cols和rows 和merges */
-    const { renderCols, renderRows, renderMerges } = this.filterData(this.opts);
-    /* 3. 处理columns */
-    const colLines = this.getColLines(renderCols, canvasHeight);
-    /* 4. 处理rows */
-    const rowLines = this.getRowLines(renderRows, canvasWidth);
-
-    this.renderCols = renderCols;
-    this.renderRows = renderRows;
-    this.renderMerges = renderMerges;
-
-    this.colLines = colLines;
-    this.rowLines = rowLines;
-
-    /* 5. 画线 */
-    drawLines({
-      lines: [].concat(colLines, rowLines, this.wrapperLines),
-      ctx: this.canvas,
-    });
-
-    /* 6. 渲染文字 */
-    this.render({ columns: renderCols, rows: renderRows }, this.opts, this.canvas);
-
-    /* 7. 处理merges */
-    this.drawMergeCell(renderMerges, this.canvas);
+    /* 2. 刷新页面 */
+    this.refresh(this.scrollY, this.scrollX);
   }
 
   createCanvas(opts) {
@@ -177,6 +152,43 @@ class CanvasForm {
     );
   }
 
+  refresh(scrollY, scrollX) {
+    const { canvasWidth, canvasHeight } = this.opts;
+    this.canvas.clearRect(0, 0, canvasWidth, canvasHeight);
+
+    this.scrollTopRowIndex = this.getScrollTopRowIndex(scrollY, this.scrollTopRowIndex, this.rows);
+    this.scrollTopColIndex = this.getScrollTopColIndex(
+      scrollX,
+      this.scrollTopColIndex,
+      this.columns
+    );
+
+    /* 2. 过滤显示的cols和rows 和merges */
+    const { renderCols, renderRows, renderMerges } = this.filterData(this.opts);
+    /* 3. 处理columnLines */
+    const colLines = this.getColLines(renderCols, canvasHeight);
+    /* 4. 处理columnLines */
+    const rowLines = this.getRowLines(renderRows, canvasWidth);
+
+    this.renderCols = renderCols;
+    this.colLines = colLines;
+    this.renderRows = renderRows;
+    this.rowLines = rowLines;
+    this.renderMerges = renderMerges;
+
+    /* 5. 画线 */
+    drawLines({
+      lines: [].concat(this.rowLines, this.colLines, this.wrapperLines),
+      ctx: this.canvas,
+    });
+    /* 6. 画文字 */
+    this.render({ columns: this.renderCols, rows: this.renderRows }, this.opts, this.canvas);
+    /* 7. 处理合并格子 */
+    this.drawMergeCell(renderMerges, this.canvas);
+    /* 8. 处理选中格子 */
+    this.drawSelectedCell(this.selectedCell, this.canvas);
+  }
+
   filterData(opts) {
     const { renderColCount, renderRowCount, merges } = opts;
     const columns = this.columns;
@@ -219,8 +231,8 @@ class CanvasForm {
     cols.forEach(column => {
       const { x, width } = column;
 
-      const from = [x + width, 0];
-      const to = [x + width, height - this.yEnd];
+      const from = [x + width - this.scrollX, 0];
+      const to = [x + width - this.scrollX, height - this.yEnd];
 
       lines.push({ from, to });
     });
@@ -234,8 +246,8 @@ class CanvasForm {
     rows.forEach(row => {
       const { y, height } = row;
 
-      const from = [0 - this.scrollX, y + height - this.scrollY];
-      const to = [width - this.xEnd - this.scrollX, y + height - this.scrollY];
+      const from = [0, y + height - this.scrollY];
+      const to = [width - this.xEnd, y + height - this.scrollY];
       lines.push({ from, to });
     });
 
@@ -293,9 +305,6 @@ class CanvasForm {
 
   listen() {
     this.$canvasEl.addEventListener("click", this.onSelectCell);
-    // this.emitter.on("selectCellChange", e => {
-    //   console.log("select cell changed", e);
-    // });
 
     this.isIE
       ? this.$canvasEl.addEventListener("mousewheel", this.onWheel)
@@ -322,35 +331,9 @@ class CanvasForm {
 
     window.requestAnimationFrame(() => {
       // console.log(e.wheelDelta);
-      const { canvasWidth, canvasHeight } = this.opts;
+      const { canvasHeight } = this.opts;
       this.scrollY -= e.wheelDelta;
       this.scrollY = Math.min(Math.max(0, this.scrollY), lastRow.y + lastRow.height - canvasHeight);
-
-      // this.canvas.clearRect(0, 0, canvasWidth, canvasHeight);
-
-      // this.scrollTopRowIndex = this.getScrollTopRowIndex(
-      //   this.scrollY,
-      //   this.scrollTopRowIndex,
-      //   rows
-      // );
-
-      // const { renderCols, renderRows, renderMerges } = this.filterData(this.opts);
-      // const colLines = this.getColLines(renderCols, canvasHeight);
-      // const rowLines = this.getRowLines(renderRows, canvasWidth);
-
-      // this.renderCols = renderCols;
-      // this.colLines = colLines;
-      // this.renderRows = renderRows;
-      // this.rowLines = rowLines;
-      // this.renderMerges = renderMerges;
-
-      // drawLines({
-      //   lines: [].concat(this.rowLines, this.colLines, this.wrapperLines),
-      //   ctx: this.canvas,
-      // });
-      // this.render({ columns: this.renderCols, rows: this.renderRows }, this.opts, this.canvas);
-      // this.drawMergeCell(renderMerges, this.canvas);
-      // this.drawSelectedCell(this.selectedCell, this.canvas);
 
       this.refresh(this.scrollY, this.scrollX);
     });
@@ -443,7 +426,8 @@ class CanvasForm {
       startColIndex,
       endColIndex,
       colIndex,
-    } = this.selectedCell;
+    } = cacheSelectCell;
+    const { canvasHeight, canvasWidth } = this.opts;
     let nextCellPosition = null,
       nextColIndex = 0,
       nextRowIndex = 0;
@@ -471,28 +455,41 @@ class CanvasForm {
 
     nextColIndex = Math.max(0, Math.min(this.columns.length - 1, nextColIndex));
     nextRowIndex = Math.max(0, Math.min(this.rows.length - 1, nextRowIndex));
+    const nextRow = this.rows[nextRowIndex];
+    const nextCol = this.columns[nextColIndex];
 
     nextCellPosition = {
-      offsetX: this.columns[nextColIndex].x - cacheScrollX + 1,
-      offsetY: this.rows[nextRowIndex].y - cacheScrollY + 1,
+      offsetX: Math.max(1, nextCol.x - cacheScrollX + 1),
+      offsetY: Math.max(1, nextRow.y - cacheScrollY + 1),
     };
 
     this.updateSelect(nextCellPosition);
 
-    if (this.selectedCell.y + this.selectedCell.height - cacheScrollY >= this.opts.canvasHeight) {
-      this.scrollY = this.selectedCell.y;
-      this.refresh(this.scrollY, this.scrollX);
+    const { x, y, width, height } = this.selectedCell;
+    /* 判断Y轴翻页 */
+    if (y + height - cacheScrollY >= canvasHeight) {
+      this.scrollY = y;
+      const lastRow = this.rows[this.rows.length - 1];
+      this.scrollY = Math.min(this.scrollY, lastRow.y + lastRow.height - canvasHeight);
     }
 
-    if (this.selectedCell.y <= cacheScrollY) {
-      this.scrollY -=
-        this.opts.canvasHeight - (this.selectedCell.height - (cacheScrollY - this.selectedCell.y));
+    if (y <= cacheScrollY) {
+      this.scrollY -= canvasHeight - (height - (cacheScrollY - y));
       this.scrollY = Math.max(0, this.scrollY);
-      console.log("this.scrollY: ", this.scrollY);
-      this.refresh(this.scrollY, this.scrollX);
     }
 
-    this.drawSelectedCell(this.selectedCell, this.canvas, cacheSelectCell);
+    /* 判断X轴翻页 */
+    if (x + width - cacheScrollX >= canvasWidth) {
+      this.scrollX = x;
+      const lastColumn = this.columns[this.columns.length - 1];
+      this.scrollX = Math.min(this.scrollX, lastColumn.x + lastColumn.width - canvasWidth);
+    }
+    if (x <= cacheScrollX) {
+      this.scrollX -= canvasWidth - (width - (cacheScrollX - x));
+      this.scrollX = Math.max(0, this.scrollX);
+    }
+
+    this.refresh(this.scrollY, this.scrollX);
   }
 
   drawSelectedCell(currentCell, ctx, prevCell) {
@@ -564,61 +561,6 @@ class CanvasForm {
     drawText(values, ctx);
   }
 
-  // updateCells(columns, rows) {
-  //   if (!columns || !Array.isArray(columns) || !rows || !Array.isArray(rows))
-  //     throw new Error("columns&&rows should be [Array], check it.");
-  //   if (!columns.length || !rows.length) throw new Error("columns&&rows should has items.");
-
-  //   let result = {};
-  //   columns.forEach(column => {
-  //     const { x, width, id: colId, index: colIndex, title } = column;
-  //     rows.forEach(row => {
-  //       const { y, height, id: rowId, index: rowIndex, data } = row;
-  //       const _id = getHashId(`${colId}${rowId}`);
-  //       result = Object.assign({}, result, {
-  //         [_id]: {
-  //           x,
-  //           y,
-  //           width,
-  //           height,
-  //           value: data[colId],
-  //           rowIndex,
-  //           colIndex,
-  //           rowId,
-  //           colId,
-  //         },
-  //       });
-  //     });
-  //   });
-
-  //   this.cells = result;
-  // }
-
-  refresh(scrollY, scrollX) {
-    const { canvasWidth, canvasHeight } = this.opts;
-    this.canvas.clearRect(0, 0, canvasWidth, canvasHeight);
-
-    this.scrollTopRowIndex = this.getScrollTopRowIndex(scrollY, this.scrollTopRowIndex, this.rows);
-
-    const { renderCols, renderRows, renderMerges } = this.filterData(this.opts);
-    const colLines = this.getColLines(renderCols, canvasHeight);
-    const rowLines = this.getRowLines(renderRows, canvasWidth);
-
-    this.renderCols = renderCols;
-    this.colLines = colLines;
-    this.renderRows = renderRows;
-    this.rowLines = rowLines;
-    this.renderMerges = renderMerges;
-
-    drawLines({
-      lines: [].concat(this.rowLines, this.colLines, this.wrapperLines),
-      ctx: this.canvas,
-    });
-    this.render({ columns: this.renderCols, rows: this.renderRows }, this.opts, this.canvas);
-    this.drawMergeCell(renderMerges, this.canvas);
-    this.drawSelectedCell(this.selectedCell, this.canvas);
-  }
-
   getRectLines(rect) {
     if (!rect) return false;
     let { x, y, width, height } = rect;
@@ -658,6 +600,33 @@ class CanvasForm {
     }
 
     return scrollTopRowIndex;
+  }
+
+  getScrollTopColIndex(scrollX, scrollTopColIndex, cols) {
+    if (scrollX <= 0) return 0;
+
+    const currentCol = cols[scrollTopColIndex];
+    const { x, width } = currentCol;
+
+    if (scrollX > width + x) {
+      for (let i = scrollTopColIndex; i < cols.length; i++) {
+        const col = cols[i];
+        if (col.x + col.width > scrollX) {
+          return i;
+        }
+      }
+    }
+
+    if (scrollX < x) {
+      for (let i = scrollTopColIndex; i >= 0; i--) {
+        const col = cols[i];
+        if (scrollX > col.x) {
+          return i;
+        }
+      }
+    }
+
+    return scrollTopColIndex;
   }
 }
 
