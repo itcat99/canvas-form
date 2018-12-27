@@ -431,58 +431,60 @@ class CanvasForm {
 
   onMouseMove = e => {
     const { scroll } = this.opts;
-    if (scroll) {
-      const { offsetX, offsetY } = e;
-      const offset = [offsetX * this.pixelRatio, offsetY * this.pixelRatio];
+    window.requestAnimationFrame(() => {
+      if (scroll) {
+        const { offsetX, offsetY } = e;
+        const offset = [offsetX * this.pixelRatio, offsetY * this.pixelRatio];
 
-      if (this.dragScrolling) {
-        // let scrollY = 0;
-        if (this.hoverScrollerY) {
-          const currentOffset =
-            this.cacheScrollerYOffset + offset[1] - this.cacheMouseDownOffset[1];
-          this.scrollY =
-            (currentOffset / (this.viewHeight - 100)) * (this.maxHeight - this.viewHeight);
+        if (this.dragScrolling) {
+          // let scrollY = 0;
+          if (this.hoverScrollerY) {
+            const currentOffset =
+              this.cacheScrollerYOffset + offset[1] - this.cacheMouseDownOffset[1];
+            this.scrollY =
+              (currentOffset / (this.viewHeight - 100)) * (this.maxHeight - this.viewHeight);
 
-          this.scrollY = Math.max(0, Math.min(this.scrollY, this.maxHeight - this.viewHeight));
+            this.scrollY = Math.max(0, Math.min(this.scrollY, this.maxHeight - this.viewHeight));
+          }
+
+          if (this.hoverScrollerX) {
+            const currentOffset =
+              this.cacheScrollerXOffset + offset[0] - this.cacheMouseDownOffset[0];
+            this.scrollX =
+              (currentOffset / (this.viewWidth - 100)) * (this.maxWidth - this.viewWidth);
+
+            this.scrollX = Math.max(0, Math.min(this.scrollX, this.maxWidth - this.viewWidth));
+          }
+
+          this.refresh(this.scrollY, this.scrollX);
+          return false;
         }
 
-        if (this.hoverScrollerX) {
-          const currentOffset =
-            this.cacheScrollerXOffset + offset[0] - this.cacheMouseDownOffset[0];
-          this.scrollX =
-            (currentOffset / (this.viewWidth - 100)) * (this.maxWidth - this.viewWidth);
-
-          this.scrollX = Math.max(0, Math.min(this.scrollX, this.maxWidth - this.viewWidth));
+        const scrollYOffset = {
+          from: [this.viewWidth, this.yOffset],
+          to: [this.width - this.xOffset, this.viewHeight - this.yOffset],
+        };
+        const scrollXOffset = {
+          from: [this.xOffset, this.viewHeight],
+          to: [this.viewWidth - this.xOffset, this.height - this.yOffset],
+        };
+        const inScrollerY = inScope(offset, scrollYOffset),
+          inScrollerX = inScope(offset, scrollXOffset);
+        if (inScrollerY) {
+          this.emitter.emit("SCROLLER_HOVER", { type: "y", offset });
+          this.hoverScrollerY = true;
+        } else if (inScrollerX) {
+          this.emitter.emit("SCROLLER_HOVER", { type: "x", offset });
+          this.hoverScrollerX = true;
+        } else {
+          if (this.hoverScrollerY || this.hoverScrollerX) {
+            this.emitter.emit("SCROLLER_HOVER_OFF");
+            this.hoverScrollerY = false;
+            this.hoverScrollerX = false;
+          }
         }
-
-        this.refresh(this.scrollY, this.scrollX);
-        return false;
       }
-
-      const scrollYOffset = {
-        from: [this.viewWidth, this.yOffset],
-        to: [this.width - this.xOffset, this.viewHeight - this.yOffset],
-      };
-      const scrollXOffset = {
-        from: [this.xOffset, this.viewHeight],
-        to: [this.viewWidth - this.xOffset, this.height - this.yOffset],
-      };
-      const inScrollerY = inScope(offset, scrollYOffset),
-        inScrollerX = inScope(offset, scrollXOffset);
-      if (inScrollerY) {
-        this.emitter.emit("SCROLLER_HOVER", { type: "y", offset });
-        this.hoverScrollerY = true;
-      } else if (inScrollerX) {
-        this.emitter.emit("SCROLLER_HOVER", { type: "x", offset });
-        this.hoverScrollerX = true;
-      } else {
-        if (this.hoverScrollerY || this.hoverScrollerX) {
-          this.emitter.emit("SCROLLER_HOVER_OFF");
-          this.hoverScrollerY = false;
-          this.hoverScrollerX = false;
-        }
-      }
-    }
+    });
   };
 
   onMouseLeave = e => {
