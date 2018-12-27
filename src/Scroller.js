@@ -59,7 +59,6 @@ class Scroller {
 
   updateBarStyle(styles) {
     const barInfo = this.getBarInfo();
-    console.log("update bar style: ", styles);
     drawRects([barInfo], this.ctx, { fillStyle: "#fff" });
     drawRects([barInfo], this.ctx, styles);
   }
@@ -67,15 +66,12 @@ class Scroller {
   listen() {
     this.emitter.on("SCROLLER_HOVER", this.onMouseIn);
     this.emitter.on("SCROLLER_HOVER_OFF", this.onMouseOut);
-    this.emitter.on("scrolling", this.onScrolling);
+    this.emitter.on("SCROLLING", this.onScrolling);
   }
   onMouseIn = data => {
     const { type, offset } = data;
-    const [x, y] = offset;
     if (type === this.type) {
-      const barInfo = this.getBarInfo();
-      const [barX, barY, barWidth, barHeight] = barInfo;
-      if (inScope([x, y], { from: [barX, barY], to: [barX + barWidth, barY + barHeight] })) {
+      if (this.isInBar(offset)) {
         document.body.style.cursor = "pointer";
         this.updateBarStyle({ fillStyle: "rgba(0,0,0,.5)" });
       }
@@ -90,6 +86,13 @@ class Scroller {
       this.updateBarStyle({ fillStyle: "rgba(0,0,0,.2)" });
     }
   };
+
+  isInBar(offset) {
+    const barInfo = this.getBarInfo();
+    const [barX, barY, barWidth, barHeight] = barInfo;
+
+    return inScope(offset, { from: [barX, barY], to: [barX + barWidth, barY + barHeight] });
+  }
   onScrolling = () => {};
   updateBar() {}
 }

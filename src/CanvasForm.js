@@ -373,7 +373,7 @@ class CanvasForm {
   }
 
   listen() {
-    this.$canvasEl.addEventListener("click", this.onSelectCell);
+    this.$canvasEl.addEventListener("click", this.onClick);
 
     this.isIE
       ? this.$canvasEl.addEventListener("mousewheel", this.onWheel)
@@ -382,11 +382,17 @@ class CanvasForm {
     this.$canvasEl.addEventListener("keydown", this.onKeydown);
     this.$canvasEl.addEventListener("mousemove", this.onMouseMove);
     this.$canvasEl.addEventListener("mouseleave", this.onMouseLeave);
+    this.$canvasEl.addEventListener("mousedown", this.onMouseDown);
+    this.$canvasEl.addEventListener("mouseup", this.onMouseUp);
   }
 
-  onSelectCell = e => {
+  onClick = e => {
     const offsetX = intNum(e.offsetX * this.pixelRatio);
     const offsetY = intNum(e.offsetY * this.pixelRatio);
+    if (this.hoverScrollerY || this.hoverScrollerX) {
+      console.log("click scroller");
+      return false;
+    }
     const cacheSelectCell = this.selectedCell;
 
     this.updateSelect({ offsetX, offsetY });
@@ -428,6 +434,31 @@ class CanvasForm {
     if (scroll) {
       const { offsetX, offsetY } = e;
       const offset = [offsetX * this.pixelRatio, offsetY * this.pixelRatio];
+
+      if (this.dragScrolling) {
+        // let scrollY = 0;
+        if (this.hoverScrollerY) {
+          const currentOffset =
+            this.cacheScrollerYOffset + offset[1] - this.cacheMouseDownOffset[1];
+          this.scrollY =
+            (currentOffset / (this.viewHeight - 100)) * (this.maxHeight - this.viewHeight);
+
+          this.scrollY = Math.max(0, Math.min(this.scrollY, this.maxHeight - this.viewHeight));
+        }
+
+        if (this.hoverScrollerX) {
+          const currentOffset =
+            this.cacheScrollerXOffset + offset[0] - this.cacheMouseDownOffset[0];
+          this.scrollX =
+            (currentOffset / (this.viewWidth - 100)) * (this.maxWidth - this.viewWidth);
+
+          this.scrollX = Math.max(0, Math.min(this.scrollX, this.maxWidth - this.viewWidth));
+        }
+
+        this.refresh(this.scrollY, this.scrollX);
+        return false;
+      }
+
       const scrollYOffset = {
         from: [this.viewWidth, this.yOffset],
         to: [this.width - this.xOffset, this.viewHeight - this.yOffset],
@@ -440,24 +471,39 @@ class CanvasForm {
         inScrollerX = inScope(offset, scrollXOffset);
       if (inScrollerY) {
         this.emitter.emit("SCROLLER_HOVER", { type: "y", offset });
-        this.hoverScroller = true;
+        this.hoverScrollerY = true;
       } else if (inScrollerX) {
         this.emitter.emit("SCROLLER_HOVER", { type: "x", offset });
-        this.hoverScroller = true;
+        this.hoverScrollerX = true;
       } else {
-        if (this.hoverScroller) {
+        if (this.hoverScrollerY || this.hoverScrollerX) {
           this.emitter.emit("SCROLLER_HOVER_OFF");
-          this.hoverScroller = false;
+          this.hoverScrollerY = false;
+          this.hoverScrollerX = false;
         }
       }
     }
   };
 
   onMouseLeave = e => {
-    if (this.hoverScroller) {
+    if (this.hoverScrollerY || this.hoverScrollerX) {
       this.emitter.emit("SCROLLER_HOVER_OFF");
       this.hoverScroller = false;
+      this.dragScrolling = false;
     }
+  };
+
+  onMouseDown = e => {
+    if (this.hoverScrollerY || this.hoverScrollerX) {
+      this.dragScrolling = true;
+      this.cacheMouseDownOffset = [e.offsetX * this.pixelRatio, e.offsetY * this.pixelRatio];
+      this.cacheScrollerYOffset = this.scrollerY.offset;
+      this.cacheScrollerXOffset = this.scrollerX.offset;
+    }
+  };
+
+  onMouseUp = e => {
+    this.dragScrolling = false;
   };
 
   updateSelect(position) {
