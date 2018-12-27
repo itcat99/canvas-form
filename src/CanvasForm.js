@@ -1,6 +1,7 @@
 import DEFAULTS from "./defaults";
-import { intNum, getHashId, nearly, getTextPosition, isIE, splitText, KEY_CODES } from "./helpers";
+import { intNum, nearly, getTextPosition, isIE, splitText, inScope, KEY_CODES } from "./helpers";
 import { drawLines, drawText, clearRect, setCtxAttrs } from "./canvas";
+import Scroller from "./Scroller";
 import mitt from "mitt";
 
 class CanvasForm {
@@ -11,19 +12,24 @@ class CanvasForm {
 
     this.$target = null;
     this.$canvasEl = null;
-    this.canvas = null;
+    this.ctx = null;
 
     /* 有关canvas画1px线模糊 和 高分屏 的初始化x,y */
-    this.xStart = 0.5 * this.pixelRatio;
-    this.yStart = 0.5 * this.pixelRatio;
-    this.xEnd = this.xStart * 2;
-    this.yEnd = this.yStart * 2;
+    this.xOffset = 0.5 * this.pixelRatio;
+    this.yOffset = 0.5 * this.pixelRatio;
+
+    /* 初始化宽高 */
+    const { canvasWidth, canvasHeight, scroll, scrollYSize, scrollXSize } = this.opts;
+    this.width = canvasWidth;
+    this.height = canvasHeight;
+    this.viewWidth = scroll ? this.width - scrollYSize : this.width;
+    this.viewHeight = scroll ? this.height - scrollXSize : this.height;
 
     /* 四个顶点的坐标 不包含边框 leftTop & rightTop & rightBottom & leftBottom */
-    this.lt = [this.xStart, this.yStart];
-    this.rt = [this.opts.canvasWidth - this.xEnd, this.yStart];
-    this.rb = [this.opts.canvasWidth - this.xEnd, this.opts.canvasHeight - this.yEnd];
-    this.lb = [this.xStart, this.opts.canvasHeight - this.yEnd];
+    this.lt = [this.xOffset, this.yOffset];
+    this.rt = [this.width - this.xOffset, this.yOffset];
+    this.rb = [this.width - this.xOffset, this.height - this.yOffset];
+    this.lb = [this.xOffset, this.height - this.yOffset];
     this.wrapperLines = [
       { from: this.lt, to: this.rt },
       { from: this.rt, to: this.rb },
@@ -46,7 +52,7 @@ class CanvasForm {
     this.scrollTopRowIndex = 0;
     this.scrollTopColIndex = 0;
 
-    // this.emitter = mitt();
+    this.emitter = mitt();
 
     /* 初始化rows && cols */
     this.handleCoord();
@@ -67,13 +73,20 @@ class CanvasForm {
       lineWidth: this.pixelRatio,
     });
 
+    if (options.scroll) {
+      options = Object.assign({}, options, {
+        scrollXSize: options.scrollXSize * this.pixelRatio,
+        scrollYSize: options.scrollYSize * this.pixelRatio,
+      });
+    }
+
     return options;
   }
 
   handleCoord() {
     let { rows, columns } = this.opts;
-    let rowHeightCount = this.yStart,
-      colWidthCount = this.xStart;
+    let rowHeightCount = this.yOffset,
+      colWidthCount = this.xOffset;
 
     rows = rows.map((row, index) => {
       let { height } = row;
@@ -102,6 +115,16 @@ class CanvasForm {
     this.createCanvas(this.opts);
     /* 2. 刷新页面 */
     this.refresh(this.scrollY, this.scrollX);
+    /* 3. 初始化scroll相关 */
+    if (this.opts.scroll) {
+      const lastRow = this.rows[this.rows.length - 1];
+      const lastColumn = this.columns[this.columns.length - 1];
+
+      this.maxHeight = lastRow.y + lastRow.height;
+      this.maxWidth = lastColumn.x + lastColumn.width;
+
+      this.initScroller();
+    }
   }
 
   createCanvas(opts) {
@@ -115,27 +138,17 @@ class CanvasForm {
     });
     $target.appendChild($canvasEl);
 
-    const {
-      width,
-      height,
-      canvasWidth,
-      canvasHeight,
-      fontSize,
-      fontFamily,
-      fontWeight,
-      fillColor,
-      strokeColor,
-    } = opts;
+    const { width, height, fontSize, fontFamily, fontWeight, fillColor, strokeColor } = opts;
     this.$canvasEl = $canvasEl;
-    this.canvas = $canvasEl.getContext("2d");
+    this.ctx = $canvasEl.getContext("2d");
 
     /* 设置初始属性 */
     this.setCanvasElAttrs(
       {
         class: opts.className,
         style: `width:${width}px; height:${height}px;`,
-        width: canvasWidth,
-        height: canvasHeight,
+        width: this.width,
+        height: this.height,
         tabindex: "-1",
       },
       this.$canvasEl
@@ -148,13 +161,12 @@ class CanvasForm {
         textBaseline: "middle",
         textAlign: "center",
       },
-      this.canvas
+      this.ctx
     );
   }
 
   refresh(scrollY, scrollX) {
-    const { canvasWidth, canvasHeight } = this.opts;
-    this.canvas.clearRect(0, 0, canvasWidth, canvasHeight);
+    this.ctx.clearRect(0, 0, this.width, this.height);
 
     this.scrollTopRowIndex = this.getScrollTopRowIndex(scrollY, this.scrollTopRowIndex, this.rows);
     this.scrollTopColIndex = this.getScrollTopColIndex(
@@ -166,9 +178,9 @@ class CanvasForm {
     /* 2. 过滤显示的cols和rows 和merges */
     const { renderCols, renderRows, renderMerges } = this.filterData(this.opts);
     /* 3. 处理columnLines */
-    const colLines = this.getColLines(renderCols, canvasHeight);
+    const colLines = this.getColLines(renderCols, this.viewHeight);
     /* 4. 处理columnLines */
-    const rowLines = this.getRowLines(renderRows, canvasWidth);
+    const rowLines = this.getRowLines(renderRows, this.viewWidth);
 
     this.renderCols = renderCols;
     this.colLines = colLines;
@@ -179,20 +191,66 @@ class CanvasForm {
     /* 5. 画线 */
     drawLines({
       lines: [].concat(this.rowLines, this.colLines),
-      ctx: this.canvas,
+      ctx: this.ctx,
     });
     /* 6. 画文字 */
-    this.render({ columns: this.renderCols, rows: this.renderRows }, this.opts, this.canvas);
+    this.render({ columns: this.renderCols, rows: this.renderRows }, this.opts, this.ctx);
     /* 7. 处理合并格子 */
-    this.drawMergeCell(renderMerges, this.canvas);
+    this.drawMergeCell(renderMerges, this.ctx);
     /* 8. 处理选中格子 */
-    this.drawSelectedCell(this.selectedCell, this.canvas);
-
-    /* 9. 画外框 */
+    this.drawSelectedCell(this.selectedCell, this.ctx);
+    /* 11. 处理滚动 */
+    this.updateScroller();
+    /* 10. 画外框 */
     drawLines({
       lines: this.wrapperLines,
-      ctx: this.canvas,
+      ctx: this.ctx,
     });
+  }
+
+  initScroller() {
+    const { scrollXSize, scrollYSize } = this.opts;
+    const [rtX, rtY] = this.rt;
+    const [lbX, lbY] = this.lb;
+
+    this.scrollerY = new Scroller({
+      emitter: this.emitter,
+      ctx: this.ctx,
+      type: "y",
+      width: scrollYSize,
+      height: this.viewHeight + scrollXSize - this.pixelRatio * 2,
+      barWidth: 30,
+      barHeight: 100,
+      x: rtX - scrollYSize - this.xOffset,
+      y: rtY + this.yOffset,
+      maxScrollSize: this.viewHeight - this.xOffset,
+    });
+
+    this.scrollerX = new Scroller({
+      emitter: this.emitter,
+      ctx: this.ctx,
+      type: "x",
+      width: this.viewWidth + scrollYSize - this.pixelRatio * 2,
+      height: scrollXSize,
+      barWidth: 100,
+      barHeight: 30,
+      x: lbX + this.xOffset,
+      y: lbY - scrollXSize - this.yOffset,
+      maxScrollSize: this.viewWidth - this.xOffset,
+    });
+  }
+
+  updateScroller() {
+    if (!this.opts.scroll) return false;
+    if (this.scrollerX && this.scrollerY) {
+      this.scrollerX.scrollTo(
+        (this.scrollX / (this.maxWidth - this.viewWidth)) * (this.viewWidth - 100)
+      );
+
+      this.scrollerY.scrollTo(
+        (this.scrollY / (this.maxHeight - this.viewHeight)) * (this.viewHeight - 100)
+      );
+    }
   }
 
   filterData(opts) {
@@ -238,7 +296,7 @@ class CanvasForm {
       const { x, width } = column;
 
       const from = [x + width - this.scrollX, 0];
-      const to = [x + width - this.scrollX, height - this.yEnd];
+      const to = [x + width - this.scrollX, height - this.yOffset];
 
       lines.push({ from, to });
     });
@@ -253,7 +311,7 @@ class CanvasForm {
       const { y, height } = row;
 
       const from = [0, y + height - this.scrollY];
-      const to = [width - this.xEnd, y + height - this.scrollY];
+      const to = [width - this.xOffset, y + height - this.scrollY];
       lines.push({ from, to });
     });
 
@@ -322,6 +380,8 @@ class CanvasForm {
       : this.$canvasEl.addEventListener("wheel", this.onWheel);
 
     this.$canvasEl.addEventListener("keydown", this.onKeydown);
+    this.$canvasEl.addEventListener("mousemove", this.onMouseMove);
+    this.$canvasEl.addEventListener("mouseleave", this.onMouseLeave);
   }
 
   onSelectCell = e => {
@@ -330,12 +390,13 @@ class CanvasForm {
     const cacheSelectCell = this.selectedCell;
 
     this.updateSelect({ offsetX, offsetY });
-    this.drawSelectedCell(this.selectedCell, this.canvas, cacheSelectCell);
+    this.drawSelectedCell(this.selectedCell, this.ctx, cacheSelectCell);
+    this.updateScroller();
   };
 
   onWheel = e => {
     e.preventDefault ? e.preventDefault : (e.returnValue = false);
-    const { canvasHeight } = this.opts;
+    const { canvasHeight, scroll, scrollXSize } = this.opts;
     const rows = this.rows;
     const lastRow = rows[rows.length - 1];
     if (lastRow.y + lastRow.height < canvasHeight) return false;
@@ -343,8 +404,11 @@ class CanvasForm {
     window.requestAnimationFrame(() => {
       // console.log(e.wheelDelta);
       const { canvasHeight } = this.opts;
+      let maxHeight = lastRow.y + lastRow.height - canvasHeight;
+      if (scroll) maxHeight += scrollXSize;
+
       this.scrollY -= e.wheelDelta;
-      this.scrollY = Math.min(Math.max(0, this.scrollY), lastRow.y + lastRow.height - canvasHeight);
+      this.scrollY = Math.min(Math.max(0, this.scrollY), maxHeight);
 
       this.refresh(this.scrollY, this.scrollX);
     });
@@ -356,6 +420,43 @@ class CanvasForm {
 
     if (KEY_CODES[code] && this.selectedCell) {
       this.updateSelectWithKeyboard(KEY_CODES[code]);
+    }
+  };
+
+  onMouseMove = e => {
+    const { scroll } = this.opts;
+    if (scroll) {
+      const { offsetX, offsetY } = e;
+      const offset = [offsetX * this.pixelRatio, offsetY * this.pixelRatio];
+      const scrollYOffset = {
+        from: [this.viewWidth, this.yOffset],
+        to: [this.width - this.xOffset, this.viewHeight - this.yOffset],
+      };
+      const scrollXOffset = {
+        from: [this.xOffset, this.viewHeight],
+        to: [this.viewWidth - this.xOffset, this.height - this.yOffset],
+      };
+      const inScrollerY = inScope(offset, scrollYOffset),
+        inScrollerX = inScope(offset, scrollXOffset);
+      if (inScrollerY) {
+        this.emitter.emit("SCROLLER_HOVER", { type: "y", offset });
+        this.hoverScroller = true;
+      } else if (inScrollerX) {
+        this.emitter.emit("SCROLLER_HOVER", { type: "x", offset });
+        this.hoverScroller = true;
+      } else {
+        if (this.hoverScroller) {
+          this.emitter.emit("SCROLLER_HOVER_OFF");
+          this.hoverScroller = false;
+        }
+      }
+    }
+  };
+
+  onMouseLeave = e => {
+    if (this.hoverScroller) {
+      this.emitter.emit("SCROLLER_HOVER_OFF");
+      this.hoverScroller = false;
     }
   };
 
@@ -378,10 +479,10 @@ class CanvasForm {
       const yEnd = endRow.y + endRow.height;
 
       if (
-        offsetX + this.scrollX > xStart &&
-        offsetX + this.scrollX < xEnd &&
-        offsetY + this.scrollY > yStart &&
-        offsetY + this.scrollY < yEnd
+        inScope([offsetX + this.scrollX, offsetY + this.scrollY], {
+          from: [xStart, yStart],
+          to: [xEnd, yEnd],
+        })
       ) {
         // const
         this.selectedCell = {
@@ -438,7 +539,7 @@ class CanvasForm {
       endColIndex,
       colIndex,
     } = cacheSelectCell;
-    const { canvasHeight, canvasWidth } = this.opts;
+    const { canvasHeight, canvasWidth, scroll, scrollXSize, scrollYSize } = this.opts;
     let nextCellPosition = null,
       nextColIndex = 0,
       nextRowIndex = 0;
@@ -481,7 +582,9 @@ class CanvasForm {
     if (y + height - cacheScrollY >= canvasHeight) {
       this.scrollY = y;
       const lastRow = this.rows[this.rows.length - 1];
-      this.scrollY = Math.min(this.scrollY, lastRow.y + lastRow.height - canvasHeight);
+      let maxHeight = lastRow.y + lastRow.height - canvasHeight;
+      if (scroll) maxHeight += scrollXSize;
+      this.scrollY = Math.min(this.scrollY, maxHeight);
     }
 
     if (y <= cacheScrollY) {
@@ -493,7 +596,9 @@ class CanvasForm {
     if (x + width - cacheScrollX >= canvasWidth) {
       this.scrollX = x;
       const lastColumn = this.columns[this.columns.length - 1];
-      this.scrollX = Math.min(this.scrollX, lastColumn.x + lastColumn.width - canvasWidth);
+      let maxWidth = lastColumn.x + lastColumn.width - canvasWidth;
+      if (scroll) maxWidth += scrollYSize;
+      this.scrollX = Math.min(this.scrollX, maxWidth);
     }
     if (x <= cacheScrollX) {
       this.scrollX -= canvasWidth - (width - (cacheScrollX - x));
@@ -510,13 +615,13 @@ class CanvasForm {
 
       if (this.scrollY <= y && this.scrollX <= x) {
         const cellRelativeInfo = {
-          x: x + this.xStart - this.scrollX,
-          y: y + this.yStart - this.scrollY,
-          width: width - this.xEnd,
-          height: height - this.yEnd,
+          x: x + this.xOffset - this.scrollX,
+          y: y + this.yOffset - this.scrollY,
+          width: width - this.xOffset,
+          height: height - this.yOffset,
         };
 
-        clearRect([cellRelativeInfo], this.canvas);
+        clearRect([cellRelativeInfo], this.ctx);
         const valueWidth = ctx.measureText(value).width;
         if (valueWidth > width) {
           value = splitText(value, valueWidth, width);
@@ -563,7 +668,7 @@ class CanvasForm {
       const mergeCellLines = this.getRectLines({ x, y, width, height });
       lines = [].concat(lines, mergeCellLines);
 
-      const value = startRow.data[startCol.id];
+      let value = startRow.data[startCol.id];
       const valueWidth = ctx.measureText(value).width;
       if (valueWidth > width) {
         value = splitText(value, valueWidth, width);

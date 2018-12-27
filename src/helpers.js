@@ -117,3 +117,25 @@ export const splitText = (str, strWidth, targetWidth) => {
 
   return result;
 };
+
+/**
+ * 判断是否在某个范围内
+ * @param {Number[]} offset 需要判断的坐标 [x, y]
+ * @param {Object[]} scope 需要对比的范围 {from, to}
+ * @param {Number[]} scope.from 开始点的坐标
+ * @param {Number[]} scope.to 结束点的坐标
+ * @param {Boolean} hasBorder 是否包含边界
+ * @returns {Boolean}
+ */
+export const inScope = (offset, scope, hasBorder) => {
+  const [x, y] = offset;
+  const { from, to } = scope;
+  const [fromX, fromY] = from;
+  const [toX, toY] = to;
+
+  const result = hasBorder
+    ? x >= fromX && x <= toX && y >= fromY && y <= toY
+    : x > fromX && x < toX && y > fromY && y < toY;
+
+  return result;
+};

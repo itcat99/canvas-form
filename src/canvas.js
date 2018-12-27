@@ -77,3 +77,31 @@ export const setCtxAttrs = (opts, ctx) => {
     ctx[key] = opts[key];
   }
 };
+
+/**
+ * 绘制多个实心方块
+ * @param {Number[]} rects rect的x,y,width,height
+ * @param {CanvasRenderingContext2D} ctx canvas context2d
+ * @param {Object[] | Object} styles 样式 如果是Array类型 则用index对应rects中每个的样式，如果是object 则设置所有rects的样式
+ */
+export const drawRects = (rects, ctx, styles) => {
+  if (styles) {
+    ctx.save();
+    if (Array.isArray(styles)) {
+      rects.forEach((rectInfo, index) => {
+        setCtxAttrs(styles[index], ctx);
+        ctx.fillRect(...rectInfo);
+      });
+    } else {
+      setCtxAttrs(styles, ctx);
+      rects.forEach(rectInfo => {
+        ctx.fillRect(...rectInfo);
+      });
+    }
+    ctx.restore();
+  } else {
+    rects.forEach(rectInfo => {
+      ctx.fillRect(...rectInfo);
+    });
+  }
+};

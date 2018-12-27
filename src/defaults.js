@@ -18,6 +18,9 @@ export default {
   renderRowCount: 50,
   columnWidth: 100,
   rowHeight: 30,
+  scrollYSize: 15,
+  scrollXSize: 15,
+  scroll: false,
 };
 
 /* columns
