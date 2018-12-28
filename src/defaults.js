@@ -1,8 +1,8 @@
 export default {
   className: "canvas-form",
   target: "#root",
-  width: 800, // 表格宽度
-  height: 600, // 表格高度
+  width: 1200, // 表格宽度
+  height: 800, // 表格高度
   fillColor: "#000",
   strokeColor: "#000",
   fontSize: 14,
@@ -15,7 +15,7 @@ export default {
   rows: [],
   merges: [],
   renderColCount: 12,
-  renderRowCount: 30,
+  renderRowCount: 25,
   columnWidth: 100,
   rowHeight: 30,
   scrollYSize: 15,

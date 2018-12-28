@@ -20,7 +20,15 @@ class CanvasForm {
     this.yOffset = 0.5 * this.pixelRatio;
 
     /* 初始化宽高 */
-    const { canvasWidth, canvasHeight, scroll, scrollYSize, scrollXSize } = this.opts;
+    const {
+      canvasWidth,
+      canvasHeight,
+      scroll,
+      scrollYSize,
+      scrollXSize,
+      renderRowCount,
+      renderColCount,
+    } = this.opts;
     this.width = canvasWidth;
     this.height = canvasHeight;
     this.viewWidth = scroll ? this.width - scrollYSize : this.width;
@@ -46,6 +54,8 @@ class CanvasForm {
     this.selectedCell = null;
     this.selectedRow = null;
     this.selectedCol = null;
+    this.renderRowCount = renderRowCount;
+    this.renderColCount = renderColCount;
 
     /* 滚动相关 */
     this.scrollX = 0;
@@ -56,7 +66,9 @@ class CanvasForm {
     this.emitter = mitt();
 
     /* 初始化rows && cols */
+    console.time("handlecoord");
     this.handleCoord();
+    console.timeEnd("handlecoord");
     this.init();
     this.listen();
   }
@@ -85,12 +97,27 @@ class CanvasForm {
     return options;
   }
 
+  /**
+   * 处理坐标
+   *
+   * 1. 处理rows的坐标
+   * 2. 处理cols的坐标
+   * 3. 处理moneyCell内每个小格子的x点坐标
+   * 4. 处理最大显示的row && col的数量
+   */
   handleCoord() {
     let { rows, columns, bitWidth } = this.opts;
     let rowHeightCount = this.yOffset,
       colWidthCount = this.xOffset;
 
+    let setRenderRowCount = false,
+      setRenderColCount = false;
+
     rows = rows.map((row, index) => {
+      if (rowHeightCount >= this.viewHeight && !setRenderRowCount) {
+        setRenderRowCount = true;
+        this.renderRowCount = index + 1;
+      }
       let { height } = row;
       height = intNum(height * this.pixelRatio);
       row = Object.assign({}, row, { y: rowHeightCount, height, index });
@@ -100,14 +127,27 @@ class CanvasForm {
     });
 
     columns = columns.map((col, index) => {
+      if (colWidthCount >= this.viewWidth && !setRenderColCount) {
+        setRenderColCount = true;
+        this.renderColCount = index + 1;
+      }
       let { width, type, bits } = col;
-      width =
-        type === "money"
-          ? intNum(bitWidth * bits + MONEY_CELL_PADDING * this.pixelRatio * 2)
-          : intNum(width * this.pixelRatio);
-      col = Object.assign({}, col, { x: colWidthCount, width, index });
-      colWidthCount += width;
+      width = intNum(width * this.pixelRatio);
+      const x = colWidthCount;
 
+      if (type === "money") {
+        /* 处理moneyCell bits的x坐标 */
+        const bitsX = [];
+        width = intNum(bitWidth * bits + MONEY_CELL_PADDING * this.pixelRatio * 2);
+        for (let i = 0; i < bits; i++) {
+          bitsX.push(x + i * bitWidth * this.pixelRatio);
+        }
+
+        col.bitsX = bitsX;
+      }
+      col = Object.assign({}, col, { x, width, index });
+
+      colWidthCount += width;
       return col;
     });
 
@@ -260,20 +300,24 @@ class CanvasForm {
     }
   }
 
+  /**
+   * 过滤渲染的row和col
+   * @param {Object} opts
+   */
   filterData(opts) {
-    const { renderColCount, renderRowCount, merges } = opts;
+    const { merges } = opts;
     const columns = this.columns;
     const rows = this.rows;
     const renderCols = [],
       renderRows = [],
       renderMerges = [];
 
-    for (let i = this.scrollTopColIndex; i < renderColCount + this.scrollTopColIndex; i++) {
+    for (let i = this.scrollTopColIndex; i < this.renderColCount + this.scrollTopColIndex; i++) {
       const column = columns[i];
       if (!column) break;
       column && renderCols.push(column);
     }
-    for (let i = this.scrollTopRowIndex; i < renderRowCount + this.scrollTopRowIndex; i++) {
+    for (let i = this.scrollTopRowIndex; i < this.renderRowCount + this.scrollTopRowIndex; i++) {
       const row = rows[i];
       if (!row) break;
       renderRows.push(rows[i]);
@@ -307,7 +351,8 @@ class CanvasForm {
       const from = [x + width - this.scrollX, this.yOffset];
 
       if (type === "money") {
-        lines = [].concat(lines, this.getMoneyColLines(column, height));
+        const { bitLines, bitColorLines } = this.getMoneyColLines(column, height);
+        lines = [].concat(lines, bitLines);
       }
 
       const to = [x + width - this.scrollX, height - this.yOffset];
@@ -319,10 +364,11 @@ class CanvasForm {
   }
 
   getMoneyColLines(col, height) {
-    const { bits, x, width } = col;
+    const { bits, x } = col;
     const { bitWidth } = this.opts;
 
     const bitLines = [];
+    const bitColorLines = [];
     let cacheX = x + MONEY_CELL_PADDING * this.pixelRatio;
 
     for (let i = bits; i >= 0; i--) {
@@ -333,7 +379,7 @@ class CanvasForm {
       cacheX += bitWidth;
     }
 
-    return bitLines;
+    return { bitLines, bitColorLines };
   }
 
   getRowLines(rows, width) {
@@ -612,7 +658,7 @@ class CanvasForm {
 
     this.selectedCol = nearly(columns, offsetX + this.scrollX, "x");
     this.selectedRow = nearly(rows, offsetY + this.scrollY, "y");
-    const { x, width, id: colId, index: colIndex } = this.selectedCol;
+    const { x, width, id: colId, index: colIndex, type, bitsX } = this.selectedCol;
     const { y, height, id: rowId, index: rowIndex, data } = this.selectedRow;
 
     this.selectedCell = {
@@ -625,6 +671,8 @@ class CanvasForm {
       rowId,
       colIndex,
       colId,
+      type,
+      bitsX,
     };
 
     // this.emitter.emit("selectCellChange", this.selectedCell);
@@ -715,7 +763,7 @@ class CanvasForm {
 
   drawSelectedCell(currentCell, ctx, prevCell) {
     if (prevCell) {
-      let { value, x = x, y, width, height } = prevCell;
+      let { value, x = x, y, width, height, type } = prevCell;
       if (currentCell.x === x && currentCell.y === y) return false;
 
       if (this.scrollY <= y && this.scrollX <= x) {
