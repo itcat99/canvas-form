@@ -1,5 +1,6 @@
 import DEFAULTS from "./defaults";
-import { intNum, nearly, getTextPosition, isIE, splitText, inScope, KEY_CODES } from "./helpers";
+import { intNum, nearly, getTextPosition, isIE, splitText, inScope } from "./helpers";
+import { KEY_CODES, MONEY_CELL_PADDING } from "./constents";
 import { drawLines, drawText, clearRect, setCtxAttrs } from "./canvas";
 import Scroller from "./Scroller";
 import mitt from "mitt";
@@ -70,6 +71,7 @@ class CanvasForm {
       canvasWidth: options.width * this.pixelRatio, // canvas画布的高度
       canvasHeight: options.height * this.pixelRatio, // canvas画布的高度
       fontSize: options.fontSize * this.pixelRatio,
+      bitWidth: options.bitWidth * this.pixelRatio,
       lineWidth: this.pixelRatio,
     });
 
@@ -84,7 +86,7 @@ class CanvasForm {
   }
 
   handleCoord() {
-    let { rows, columns } = this.opts;
+    let { rows, columns, bitWidth } = this.opts;
     let rowHeightCount = this.yOffset,
       colWidthCount = this.xOffset;
 
@@ -98,8 +100,11 @@ class CanvasForm {
     });
 
     columns = columns.map((col, index) => {
-      let { width } = col;
-      width = intNum(width * this.pixelRatio);
+      let { width, type, bits } = col;
+      width =
+        type === "money"
+          ? intNum(bitWidth * bits + MONEY_CELL_PADDING * this.pixelRatio * 2)
+          : intNum(width * this.pixelRatio);
       col = Object.assign({}, col, { x: colWidthCount, width, index });
       colWidthCount += width;
 
@@ -108,6 +113,8 @@ class CanvasForm {
 
     this.rows = rows;
     this.columns = columns;
+    // console.log("initial columns: ", this.columns);
+    // console.log("initial columns: ", this.rows);
   }
 
   init() {
@@ -166,7 +173,7 @@ class CanvasForm {
   }
 
   refresh(scrollY, scrollX) {
-    this.ctx.clearRect(0, 0, this.width, this.height);
+    this.ctx.clearRect(0, 0, this.viewWidth, this.viewHeight);
 
     this.scrollTopRowIndex = this.getScrollTopRowIndex(scrollY, this.scrollTopRowIndex, this.rows);
     this.scrollTopColIndex = this.getScrollTopColIndex(
@@ -194,7 +201,7 @@ class CanvasForm {
       ctx: this.ctx,
     });
     /* 6. 画文字 */
-    this.render({ columns: this.renderCols, rows: this.renderRows }, this.opts, this.ctx);
+    this.render({ columns: this.renderCols, rows: this.renderRows }, this.ctx);
     /* 7. 处理合并格子 */
     this.drawMergeCell(renderMerges, this.ctx);
     /* 8. 处理选中格子 */
@@ -272,16 +279,18 @@ class CanvasForm {
       renderRows.push(rows[i]);
     }
 
-    for (let i = 0; i < merges.length; i++) {
-      const merge = merges[i];
-      const { from, to } = merge;
-      if (
-        from[0] <= renderCols[renderCols.length - 1].index &&
-        from[1] <= renderRows[renderRows.length - 1].index &&
-        to[0] < this.columns.length &&
-        to[1] < this.rows.length
-      ) {
-        renderMerges.push(merge);
+    if (merges) {
+      for (let i = 0; i < merges.length; i++) {
+        const merge = merges[i];
+        const { from, to } = merge;
+        if (
+          from[0] <= renderCols[renderCols.length - 1].index &&
+          from[1] <= renderRows[renderRows.length - 1].index &&
+          to[0] < this.columns.length &&
+          to[1] < this.rows.length
+        ) {
+          renderMerges.push(merge);
+        }
       }
     }
 
@@ -290,18 +299,41 @@ class CanvasForm {
 
   getColLines(cols, height) {
     /* 1. 生成画线用的数据 */
-    const lines = [];
+    let lines = [];
 
     cols.forEach(column => {
-      const { x, width } = column;
+      const { x, width, type } = column;
 
-      const from = [x + width - this.scrollX, 0];
+      const from = [x + width - this.scrollX, this.yOffset];
+
+      if (type === "money") {
+        lines = [].concat(lines, this.getMoneyColLines(column, height));
+      }
+
       const to = [x + width - this.scrollX, height - this.yOffset];
-
       lines.push({ from, to });
     });
 
+    // console.log("col LINES: ", lines);
     return lines;
+  }
+
+  getMoneyColLines(col, height) {
+    const { bits, x, width } = col;
+    const { bitWidth } = this.opts;
+
+    const bitLines = [];
+    let cacheX = x + MONEY_CELL_PADDING * this.pixelRatio;
+
+    for (let i = bits; i >= 0; i--) {
+      bitLines.push({
+        from: [cacheX - this.scrollX, this.yOffset],
+        to: [cacheX - this.scrollX, height - this.yOffset],
+      });
+      cacheX += bitWidth;
+    }
+
+    return bitLines;
   }
 
   getRowLines(rows, width) {
@@ -349,27 +381,52 @@ class CanvasForm {
     }
   }
 
-  render(data, opts, ctx) {
+  render(data, ctx) {
     const { columns, rows } = data;
-    const valueInfos = [];
+    const valueInfos = this.getValueInfos(columns, rows, ctx);
+    drawText(valueInfos, ctx);
+  }
 
-    columns.forEach(column => {
-      const { id, x, width } = column;
+  getValueInfos(cols, rows, ctx) {
+    const result = [];
+    const { bitWidth } = this.opts;
+
+    cols.forEach(column => {
+      const { id, x, width, type } = column;
       rows.forEach(row => {
         const { data, y, height } = row;
-        let value = data[id];
-        const valueWidth = ctx.measureText(value).width;
-        if (valueWidth > width) {
-          value = splitText(value, valueWidth, width);
-        }
+        let value = data[id] + "";
+        const xPosition = x - this.scrollX;
+        const yPosition = y - this.scrollY;
 
-        valueInfos.push(
-          getTextPosition(value, { x: x - this.scrollX, y: y - this.scrollY, width, height })
-        );
+        if (type === "money") {
+          let bitInfo = { y: intNum(yPosition + height / 2) };
+          const valueArr = value.split("");
+          let count = 0;
+          for (let i = valueArr.length - 1; i > 0; i--) {
+            const bitValue = valueArr[i];
+            const bitXPostion =
+              xPosition + width - MONEY_CELL_PADDING * this.pixelRatio - count * bitWidth;
+            bitInfo = Object.assign({}, bitInfo, {
+              x: bitXPostion - bitWidth / 2,
+              value: bitValue,
+            });
+            result.push(bitInfo);
+
+            count++;
+          }
+        } else {
+          const valueWidth = ctx.measureText(value).width;
+          if (valueWidth > width) {
+            value = splitText(value, valueWidth, width);
+          }
+
+          result.push(getTextPosition(value, { x: xPosition, y: yPosition, width, height }));
+        }
       });
     });
 
-    drawText(valueInfos, ctx);
+    return result;
   }
 
   listen() {

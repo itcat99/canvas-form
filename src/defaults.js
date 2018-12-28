@@ -14,13 +14,14 @@ export default {
   columns: [],
   rows: [],
   merges: [],
-  renderColCount: 20,
-  renderRowCount: 50,
+  renderColCount: 12,
+  renderRowCount: 30,
   columnWidth: 100,
   rowHeight: 30,
   scrollYSize: 15,
   scrollXSize: 15,
   scroll: false,
+  bitWidth: 10,
 };
 
 /* columns

@@ -64,3 +64,8 @@ css 属性:
 3. 如果不在，则用 nearly 函数判断在哪个格子 更新 this.selectedCell
 4. 重绘上一个 selectedCell 的样式和文字
 5. 绘制新的 selectedCell 的样式和文字
+
+有问题：
+
+- moneyCell 和合并格子冲突的情况 暂不处理
+- resize 的情况 暂不处理

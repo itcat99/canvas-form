@@ -87,14 +87,6 @@ export const isIE =
     /Trident\//.test(navigator.appVersion) ||
     /Edge/.test(navigator.userAgent));
 
-export const KEY_CODES = {
-  13: "ENTER",
-  40: "ARROW_DOWN",
-  37: "ARROW_LEFT",
-  39: "ARROW_RIGHT",
-  38: "ARROW_UP",
-};
-
 /**
  * 根据宽度，截取文字（粗略）
  * @param {String} str 需要截取的文字
@@ -104,7 +96,7 @@ export const KEY_CODES = {
 export const splitText = (str, strWidth, targetWidth) => {
   let result = "";
   const textWidth = Math.floor(strWidth / str.length);
-  const textArr = str.split("");
+  const textArr = (str + "").split("");
 
   for (let i = 0; i < textArr.length; i++) {
     const text = textArr[i];
