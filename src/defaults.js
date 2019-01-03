@@ -2,7 +2,7 @@ export default {
   className: "canvas-form",
   target: "#root",
   width: 1200, // 表格宽度
-  height: 800, // 表格高度
+  height: 600, // 表格高度
   fillColor: "#000",
   strokeColor: "#000",
   fontSize: 14,
@@ -22,6 +22,9 @@ export default {
   scrollXSize: 15,
   scroll: false,
   bitWidth: 10,
+  setRowStyle: null,
+  setColStyle: null,
+  setCellStyle: null,
 };
 
 /* columns
@@ -53,4 +56,11 @@ export default {
     from: [col, row],
     to: [col, row]
   }
+*/
+
+/* setRowStyle
+  (renderRows) => ([{
+    index,
+    styles
+  }])
 */

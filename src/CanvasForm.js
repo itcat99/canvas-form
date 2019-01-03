@@ -10,14 +10,53 @@ class CanvasForm {
     this.isIE = isIE;
     /* 0. 初始化配置文件 */
     this.opts = this.initOpts(opts);
+    this.initGlobalVars();
+    /* 初始化rows && cols */
+    this.handleCoord();
+    this.init();
+    this.listen();
+  }
 
+  initOpts(opts) {
+    let options = Object.assign({}, DEFAULTS, opts);
+    /* 设备像素比 */
+    this.pixelRatio = window.devicePixelRatio;
+
+    /* 需要根据设备像素比调整的属性: ["canvasWidth", "cavnasHeight", "lineWidth", "fontSize"] */
+    options = Object.assign(
+      {},
+      options,
+      this.realSize({
+        canvasWidth: options.width, // canvas画布的高度
+        canvasHeight: options.height, // canvas画布的高度
+        fontSize: options.fontSize,
+        bitWidth: options.bitWidth,
+        lineWidth: 1,
+      })
+    );
+
+    if (options.scroll) {
+      options = Object.assign(
+        {},
+        options,
+        this.realSize({
+          scrollXSize: options.scrollXSize,
+          scrollYSize: options.scrollYSize,
+        })
+      );
+    }
+
+    return options;
+  }
+
+  initGlobalVars() {
     this.$target = null;
     this.$canvasEl = null;
     this.ctx = null;
 
     /* 有关canvas画1px线模糊 和 高分屏 的初始化x,y */
-    this.xOffset = 0.5 * this.pixelRatio;
-    this.yOffset = 0.5 * this.pixelRatio;
+    this.xOffset = this.realSize(0.5);
+    this.yOffset = this.realSize(0.5);
 
     /* 初始化宽高 */
     const {
@@ -64,37 +103,6 @@ class CanvasForm {
     this.scrollTopColIndex = 0;
 
     this.emitter = mitt();
-
-    /* 初始化rows && cols */
-    console.time("handlecoord");
-    this.handleCoord();
-    console.timeEnd("handlecoord");
-    this.init();
-    this.listen();
-  }
-
-  initOpts(opts) {
-    let options = Object.assign({}, DEFAULTS, opts);
-    /* 设备像素比 */
-    this.pixelRatio = window.devicePixelRatio;
-
-    /* 需要根据设备像素比调整的属性: ["canvasWidth", "cavnasHeight", "lineWidth", "fontSize"] */
-    options = Object.assign({}, options, {
-      canvasWidth: options.width * this.pixelRatio, // canvas画布的高度
-      canvasHeight: options.height * this.pixelRatio, // canvas画布的高度
-      fontSize: options.fontSize * this.pixelRatio,
-      bitWidth: options.bitWidth * this.pixelRatio,
-      lineWidth: this.pixelRatio,
-    });
-
-    if (options.scroll) {
-      options = Object.assign({}, options, {
-        scrollXSize: options.scrollXSize * this.pixelRatio,
-        scrollYSize: options.scrollYSize * this.pixelRatio,
-      });
-    }
-
-    return options;
   }
 
   /**
@@ -119,7 +127,7 @@ class CanvasForm {
         this.renderRowCount = index + 1;
       }
       let { height } = row;
-      height = intNum(height * this.pixelRatio);
+      height = intNum(this.realSize(height));
       row = Object.assign({}, row, { y: rowHeightCount, height, index });
       rowHeightCount += height;
 
@@ -132,15 +140,15 @@ class CanvasForm {
         this.renderColCount = index + 1;
       }
       let { width, type, bits } = col;
-      width = intNum(width * this.pixelRatio);
+      width = intNum(this.realSize(width));
       const x = colWidthCount;
 
       if (type === "money") {
         /* 处理moneyCell bits的x坐标 */
         const bitsX = [];
-        width = intNum(bitWidth * bits + MONEY_CELL_PADDING * this.pixelRatio * 2);
+        width = intNum(bitWidth * bits + this.realSize(MONEY_CELL_PADDING) * 2);
         for (let i = 0; i < bits; i++) {
-          bitsX.push(x + i * bitWidth * this.pixelRatio);
+          bitsX.push(x + i * this.realSize(bitWidth));
         }
 
         col.bitsX = bitsX;
@@ -161,7 +169,7 @@ class CanvasForm {
     /* 1. 初始化canvas到dom */
     this.createCanvas(this.opts);
     /* 2. 刷新页面 */
-    this.refresh(this.scrollY, this.scrollX);
+    this.render(this.scrollY, this.scrollX);
     /* 3. 初始化scroll相关 */
     if (this.opts.scroll) {
       const lastRow = this.rows[this.rows.length - 1];
@@ -212,43 +220,141 @@ class CanvasForm {
     );
   }
 
-  refresh(scrollY, scrollX) {
+  render() {
+    /* 0. 更新scrollTopIndex */
+    this.updateScrollTopIndex();
+    /* 1. 更新过滤的行列和合并格子  */
+    this.updateFilters();
+    /* 2. 更新行列线的坐标 */
+    this.updateLines();
+    /* 3. 更新自定义样式 */
+    this.updateCustomStyle();
+
+    // console.log("this.colStyles: ", this.colStyles);
+    /* clear */
     this.ctx.clearRect(0, 0, this.viewWidth, this.viewHeight);
 
-    this.scrollTopRowIndex = this.getScrollTopRowIndex(scrollY, this.scrollTopRowIndex, this.rows);
+    /* 4. 画有背景的格子 */
+    this.drawBg();
+    /* 5. 画线 */
+    this.drawLines(this.colLines, this.rowLines);
+    /* 6. 画文字 */
+    this.drawTexts(this.renderCols, this.renderRows, this.ctx);
+    /* 7. 处理合并 */
+    this.drawMergeCell(this.renderMerges, this.ctx);
+    /* 8. 处理选中 */
+    this.drawSelectedCell(this.selectedCell, this.ctx);
+    /* 9. 处理滚动 */
+    this.updateScroller();
+    /* 10. 更新外框 */
+    this.drawWrapper();
+  }
+
+  updateScrollTopIndex() {
+    this.scrollTopRowIndex = this.getScrollTopRowIndex(
+      this.scrollY,
+      this.scrollTopRowIndex,
+      this.rows
+    );
     this.scrollTopColIndex = this.getScrollTopColIndex(
-      scrollX,
+      this.scrollX,
       this.scrollTopColIndex,
       this.columns
     );
+  }
 
-    /* 2. 过滤显示的cols和rows 和merges */
+  updateFilters() {
     const { renderCols, renderRows, renderMerges } = this.filterData(this.opts);
-    /* 3. 处理columnLines */
-    const colLines = this.getColLines(renderCols, this.viewHeight);
-    /* 4. 处理columnLines */
-    const rowLines = this.getRowLines(renderRows, this.viewWidth);
-
     this.renderCols = renderCols;
-    this.colLines = colLines;
     this.renderRows = renderRows;
-    this.rowLines = rowLines;
     this.renderMerges = renderMerges;
+  }
 
-    /* 5. 画线 */
+  updateLines() {
+    /* 处理columnLines */
+    const colLines = this.getColLines(this.renderCols, this.viewHeight);
+    /* 处理columnLines */
+    const rowLines = this.getRowLines(this.renderRows, this.viewWidth);
+
+    this.colLines = colLines;
+    this.rowLines = rowLines;
+  }
+
+  updateCustomStyle() {
+    const { setColStyle, setRowStyle, setCellStyle } = this.opts;
+    let colStyles = [];
+    if (setColStyle) {
+      const result = setColStyle(this.renderCols);
+      this.colStyles = this.handleColStyle(result);
+    }
+
+    if (setRowStyle) {
+      const result = setRowStyle(this.renderRows);
+      this.rowStyles = this.handleRowStyle(result);
+    }
+  }
+
+  handleColStyle(data) {
+    const arr = [];
+    data.forEach(item => {
+      const { index, styles } = item;
+      const col = this.renderCols[index];
+      const { x, width } = col;
+      arr.push({
+        rect: [x - this.scrollX, this.yOffset, width, this.viewHeight],
+        styles,
+      });
+    });
+
+    return arr;
+  }
+
+  handleRowStyle(data) {
+    const arr = [];
+    data.forEach(item => {
+      const { index, styles } = item;
+      const row = this.renderRows[index];
+      const { y, height } = row;
+      arr.push({
+        rect: [this.xOffset, y - this.scrollY, this.viewWidth, height],
+        styles,
+      });
+    });
+
+    return arr;
+  }
+
+  drawBg() {
+    this.colStyles.forEach(col => {
+      this.ctx.save();
+      const { rect, styles } = col;
+      setCtxAttrs(styles, this.ctx);
+      this.ctx.fillRect(...rect);
+      this.ctx.restore();
+    });
+
+    this.rowStyles.forEach(col => {
+      this.ctx.save();
+      const { rect, styles } = col;
+      setCtxAttrs(styles, this.ctx);
+      this.ctx.fillRect(...rect);
+      this.ctx.restore();
+    });
+  }
+
+  drawLines(...lineArr) {
     drawLines({
-      lines: [].concat(this.rowLines, this.colLines),
+      lines: [].concat(...lineArr),
       ctx: this.ctx,
     });
-    /* 6. 画文字 */
-    this.render({ columns: this.renderCols, rows: this.renderRows }, this.ctx);
-    /* 7. 处理合并格子 */
-    this.drawMergeCell(renderMerges, this.ctx);
-    /* 8. 处理选中格子 */
-    this.drawSelectedCell(this.selectedCell, this.ctx);
-    /* 11. 处理滚动 */
-    this.updateScroller();
-    /* 10. 画外框 */
+  }
+
+  drawTexts(cols, rows, ctx) {
+    const valueInfos = this.getValueInfos(cols, rows, ctx);
+    drawText(valueInfos, ctx);
+  }
+
+  drawWrapper() {
     drawLines({
       lines: this.wrapperLines,
       ctx: this.ctx,
@@ -265,7 +371,7 @@ class CanvasForm {
       ctx: this.ctx,
       type: "y",
       width: scrollYSize,
-      height: this.viewHeight + scrollXSize - this.pixelRatio * 2,
+      height: this.viewHeight + scrollXSize - this.realSize(2),
       barWidth: 30,
       barHeight: 100,
       x: rtX - scrollYSize - this.xOffset,
@@ -277,7 +383,7 @@ class CanvasForm {
       emitter: this.emitter,
       ctx: this.ctx,
       type: "x",
-      width: this.viewWidth + scrollYSize - this.pixelRatio * 2,
+      width: this.viewWidth + scrollYSize - this.realSize(2),
       height: scrollXSize,
       barWidth: 100,
       barHeight: 30,
@@ -359,7 +465,6 @@ class CanvasForm {
       lines.push({ from, to });
     });
 
-    // console.log("col LINES: ", lines);
     return lines;
   }
 
@@ -369,7 +474,7 @@ class CanvasForm {
 
     const bitLines = [];
     const bitColorLines = [];
-    let cacheX = x + MONEY_CELL_PADDING * this.pixelRatio;
+    let cacheX = x + this.realSize(MONEY_CELL_PADDING);
 
     for (let i = bits; i >= 0; i--) {
       bitLines.push({
@@ -427,12 +532,6 @@ class CanvasForm {
     }
   }
 
-  render(data, ctx) {
-    const { columns, rows } = data;
-    const valueInfos = this.getValueInfos(columns, rows, ctx);
-    drawText(valueInfos, ctx);
-  }
-
   getValueInfos(cols, rows, ctx) {
     const result = [];
     const { bitWidth } = this.opts;
@@ -452,7 +551,7 @@ class CanvasForm {
           for (let i = valueArr.length - 1; i > 0; i--) {
             const bitValue = valueArr[i];
             const bitXPostion =
-              xPosition + width - MONEY_CELL_PADDING * this.pixelRatio - count * bitWidth;
+              xPosition + width - this.realSize(MONEY_CELL_PADDING) - count * bitWidth;
             bitInfo = Object.assign({}, bitInfo, {
               x: bitXPostion - bitWidth / 2,
               value: bitValue,
@@ -490,15 +589,15 @@ class CanvasForm {
   }
 
   onClick = e => {
-    const offsetX = intNum(e.offsetX * this.pixelRatio);
-    const offsetY = intNum(e.offsetY * this.pixelRatio);
+    const offsetX = intNum(e.offsetX);
+    const offsetY = intNum(e.offsetY);
     if (this.hoverScrollerY || this.hoverScrollerX) {
       console.log("click scroller");
       return false;
     }
     const cacheSelectCell = this.selectedCell;
 
-    this.updateSelect({ offsetX, offsetY });
+    this.updateSelect(this.realSize({ offsetX, offsetY }));
     this.drawSelectedCell(this.selectedCell, this.ctx, cacheSelectCell);
     this.updateScroller();
   };
@@ -519,7 +618,7 @@ class CanvasForm {
       this.scrollY -= e.wheelDelta;
       this.scrollY = Math.min(Math.max(0, this.scrollY), maxHeight);
 
-      this.refresh(this.scrollY, this.scrollX);
+      this.render(this.scrollY, this.scrollX);
     });
   };
 
@@ -537,7 +636,7 @@ class CanvasForm {
     window.requestAnimationFrame(() => {
       if (scroll) {
         const { offsetX, offsetY } = e;
-        const offset = [offsetX * this.pixelRatio, offsetY * this.pixelRatio];
+        const offset = this.realSize([offsetX, offsetY]);
 
         if (this.dragScrolling) {
           // let scrollY = 0;
@@ -559,7 +658,7 @@ class CanvasForm {
             this.scrollX = Math.max(0, Math.min(this.scrollX, this.maxWidth - this.viewWidth));
           }
 
-          this.refresh(this.scrollY, this.scrollX);
+          this.render(this.scrollY, this.scrollX);
           return false;
         }
 
@@ -601,7 +700,7 @@ class CanvasForm {
   onMouseDown = e => {
     if (this.hoverScrollerY || this.hoverScrollerX) {
       this.dragScrolling = true;
-      this.cacheMouseDownOffset = [e.offsetX * this.pixelRatio, e.offsetY * this.pixelRatio];
+      this.cacheMouseDownOffset = this.realSize([e.offsetX, e.offsetY]);
       this.cacheScrollerYOffset = this.scrollerY.offset;
       this.cacheScrollerXOffset = this.scrollerX.offset;
     }
@@ -758,7 +857,7 @@ class CanvasForm {
       this.scrollX = Math.max(0, this.scrollX);
     }
 
-    this.refresh(this.scrollY, this.scrollX);
+    this.render(this.scrollY, this.scrollX);
   }
 
   drawSelectedCell(currentCell, ctx, prevCell) {
@@ -908,7 +1007,17 @@ class CanvasForm {
     return scrollTopColIndex;
   }
 
-  getRenderStr(str, width) {}
+  realSize = val => {
+    if (typeof val === "number") return val * this.pixelRatio;
+    if (Array.isArray(val)) return val.map(item => item * this.pixelRatio);
+    if (Object.prototype.toString.call(val).indexOf("Object")) {
+      for (let key in val) {
+        val[key] *= this.pixelRatio;
+      }
+
+      return val;
+    }
+  };
 }
 
 export default CanvasForm;

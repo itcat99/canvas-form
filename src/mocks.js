@@ -1,4 +1,8 @@
 import { Random } from "mockjs";
+// const Mockjs = require("mockjs");
+// const fs = require("fs");
+// const path = require("path");
+// const { Random } = Mockjs;
 
 const getCols = count => {
   const cols = [{ id: "index", width: 50, title: "index" }];
@@ -44,3 +48,18 @@ window.mocks = {
   getCols,
   getRows,
 };
+
+// const cols = getCols(50);
+// const rows = getRows(cols, 1000);
+
+// fs.writeFile(
+//   path.resolve(__dirname, "..", "dist", "cols.js"),
+//   "window.__cols__ = " + JSON.stringify(cols),
+//   err => err && console.error(err)
+// );
+
+// fs.writeFile(
+//   path.resolve(__dirname, "..", "dist", "rows.js"),
+//   "window.__rows__ = " + JSON.stringify(rows),
+//   err => err && console.error(err)
+// );

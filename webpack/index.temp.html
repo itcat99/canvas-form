@@ -22,7 +22,42 @@
           { from: [4, 10], to: [6, 12] },
         ];
 
-        var app = new CanvasForm({ columns: columns, rows: rows, merges: null, scroll: true });
+        var app = new CanvasForm({
+          columns: columns,
+          rows: rows,
+          merges: merges,
+          scroll: true,
+          setColStyle: function(cols) {
+            // console.log("cols: ", cols);
+            const arr = [];
+            cols.forEach(function(col, index) {
+              if (index % 2) {
+                arr.push({
+                  index: index,
+                  styles: {
+                    fillStyle: "lightblue",
+                  },
+                });
+              }
+            });
+            return arr;
+          },
+          setRowStyle: function(rows) {
+            const arr = [];
+            rows.forEach(function(row, index) {
+              if (!(index % 2)) {
+                arr.push({
+                  index: index,
+                  styles: {
+                    fillStyle: "lightyellow",
+                  },
+                });
+              }
+            });
+
+            return arr;
+          },
+        });
         window.canvasformInstanced = app;
       };
     </script>

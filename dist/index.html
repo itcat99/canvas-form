@@ -8,10 +8,46 @@
   </head>
   <body>
     <div id="root"></div>
+    <script src="./cols.js"></script>
+    <script src="./rows.js"></script>
     <script src="main.js"></script>
     <script>
       window.onload = function() {
-        var app = new CanvasForm();
+        var app = new CanvasForm({
+          columns: window.__cols__,
+          rows: window.__rows__,
+          scroll: true,
+          setColStyle: function(cols) {
+            // console.log("cols: ", cols);
+            const arr = [];
+            cols.forEach(function(col, index) {
+              if (index % 2) {
+                arr.push({
+                  index: index,
+                  styles: {
+                    fillStyle: "lightblue",
+                  },
+                });
+              }
+            });
+            return arr;
+          },
+          setRowStyle: function(rows) {
+            const arr = [];
+            rows.forEach(function(row, index) {
+              if (!(index % 2)) {
+                arr.push({
+                  index: index,
+                  styles: {
+                    fillStyle: "lightyellow",
+                  },
+                });
+              }
+            });
+
+            return arr;
+          },
+        });
       };
     </script>
   </body>
