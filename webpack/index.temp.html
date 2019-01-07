@@ -23,17 +23,19 @@
         ];
 
         var app = new CanvasForm({
+          width: 1600,
+          height: 880,
           columns: columns,
           rows: rows,
           merges: merges,
           scroll: true,
           setColStyle: function(cols) {
-            // console.log("cols: ", cols);
-            const arr = [];
-            cols.forEach(function(col, index) {
+            var arr = [];
+            cols.forEach(function(col, i) {
+              var index = col.index;
               if (index % 2) {
                 arr.push({
-                  index: index,
+                  index: i,
                   styles: {
                     fillStyle: "lightblue",
                   },
@@ -43,11 +45,12 @@
             return arr;
           },
           setRowStyle: function(rows) {
-            const arr = [];
-            rows.forEach(function(row, index) {
+            var arr = [];
+            rows.forEach(function(row, i) {
+              var index = row.index;
               if (!(index % 2)) {
                 arr.push({
-                  index: index,
+                  index: i,
                   styles: {
                     fillStyle: "lightyellow",
                   },

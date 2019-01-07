@@ -325,21 +325,23 @@ class CanvasForm {
   }
 
   drawBg() {
-    this.colStyles.forEach(col => {
-      this.ctx.save();
-      const { rect, styles } = col;
-      setCtxAttrs(styles, this.ctx);
-      this.ctx.fillRect(...rect);
-      this.ctx.restore();
-    });
+    this.colStyles &&
+      this.colStyles.forEach(col => {
+        this.ctx.save();
+        const { rect, styles } = col;
+        setCtxAttrs(styles, this.ctx);
+        this.ctx.fillRect(...rect);
+        this.ctx.restore();
+      });
 
-    this.rowStyles.forEach(col => {
-      this.ctx.save();
-      const { rect, styles } = col;
-      setCtxAttrs(styles, this.ctx);
-      this.ctx.fillRect(...rect);
-      this.ctx.restore();
-    });
+    this.rowStyles &&
+      this.rowStyles.forEach(col => {
+        this.ctx.save();
+        const { rect, styles } = col;
+        setCtxAttrs(styles, this.ctx);
+        this.ctx.fillRect(...rect);
+        this.ctx.restore();
+      });
   }
 
   drawLines(...lineArr) {
@@ -598,8 +600,9 @@ class CanvasForm {
     const cacheSelectCell = this.selectedCell;
 
     this.updateSelect(this.realSize({ offsetX, offsetY }));
-    this.drawSelectedCell(this.selectedCell, this.ctx, cacheSelectCell);
-    this.updateScroller();
+    // this.drawSelectedCell(this.selectedCell, this.ctx, cacheSelectCell);
+    // this.updateScroller();
+    this.render(this.scrollY, this.scrollX);
   };
 
   onWheel = e => {
