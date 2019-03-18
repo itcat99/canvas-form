@@ -27,6 +27,6 @@
     "mockjs": "^1.0.1-beta3",
     "webpack": "^4.28.0",
     "webpack-cli": "^3.1.2",
-    "webpack-dev-server": "^3.1.10"
+    "webpack-dev-server": "^3.2.1"
   }
 }
